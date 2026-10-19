@@ -1,0 +1,167 @@
+{
+ "geometry": {
+  "x": {
+   "outer": 38.75,
+   "inner": 103.5,
+   "front": 336.5
+  },
+  "y_ax": 86.0,
+  "z_ax": -60.0,
+  "motorC": [
+   86.0,
+   24.0
+  ],
+  "hip_x": 221.5
+ },
+ "reactions_push": {
+  "38.75": -307.49460331410796,
+  "103.50": 681.6803353509684,
+  "336.50": 210.8142679631395
+ },
+ "rows": [
+  {
+   "part": "Centre bulkhead",
+   "case": "push / landing 585 N",
+   "vm": 4.2,
+   "across": 0.7,
+   "sf_petg": 10.68,
+   "sf_6061": 65.5,
+   "disp_petg": 0.21,
+   "disp_6061": 0.006,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "Centre bulkhead",
+   "case": "impact x2 1170 N",
+   "vm": 7.6,
+   "across": 1.2,
+   "sf_petg": 5.89,
+   "sf_6061": 36.1,
+   "disp_petg": 0.21,
+   "disp_6061": 0.006,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Centre bulkhead",
+   "case": "one leg x2 1170 N",
+   "vm": 6.2,
+   "across": 0.9,
+   "sf_petg": 7.25,
+   "sf_6061": 44.5,
+   "disp_petg": 0.23,
+   "disp_6061": 0.007,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "push / landing 585 N",
+   "vm": 2.9,
+   "across": 0.7,
+   "sf_petg": 15.55,
+   "sf_6061": 95.4,
+   "disp_petg": 0.07,
+   "disp_6061": 0.002,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "impact x2 1170 N",
+   "vm": 7.2,
+   "across": 1.6,
+   "sf_petg": 6.28,
+   "sf_6061": 38.5,
+   "disp_petg": 0.17,
+   "disp_6061": 0.005,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "one leg x2 1170 N",
+   "vm": 6.0,
+   "across": 1.2,
+   "sf_petg": 7.53,
+   "sf_6061": 46.2,
+   "disp_petg": 0.17,
+   "disp_6061": 0.005,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "End frame",
+   "case": "push / landing 585 N",
+   "vm": 2.1,
+   "across": 0.3,
+   "sf_petg": 21.9,
+   "sf_6061": 134.3,
+   "disp_petg": 0.06,
+   "disp_6061": 0.002,
+   "hot": [
+    333,
+    -105,
+    -58
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "End frame",
+   "case": "impact x2 1170 N",
+   "vm": 4.1,
+   "across": 0.6,
+   "sf_petg": 10.95,
+   "sf_6061": 67.2,
+   "disp_petg": 0.12,
+   "disp_6061": 0.004,
+   "hot": [
+    333,
+    -105,
+    -58
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "End frame",
+   "case": "one leg x2 1170 N",
+   "vm": 3.8,
+   "across": 0.5,
+   "sf_petg": 11.82,
+   "sf_6061": 72.5,
+   "disp_petg": 0.13,
+   "disp_6061": 0.004,
+   "hot": [
+    333,
+    105,
+    -59
+   ],
+   "target": 1.0
+  }
+ ]
+}

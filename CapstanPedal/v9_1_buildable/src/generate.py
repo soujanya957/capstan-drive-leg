@@ -808,7 +808,11 @@ def ref_motor(which):
 
 
 def ref_moteus(which):
-    b = import_step(os.path.join(REF, "ref_cad", "moteousr4.step"))
+    step = os.path.join(REF, "ref_cad", "moteousr4.step")
+    if not os.path.exists(step):                    # the board as exported before (already placed), if the STEP is absent
+        from build123d import import_stl
+        return import_stl(os.path.join(REF, "ref_cad", f"moteus_r4_placed_{which}.stl"))
+    b = import_step(step)
     x, z = MA if which == "A" else MB
     # STEP: PCB in XZ (y 0..1.65), motor side toward -Y, encoder at (0, 8); flip to face +Y,
     # then flip 180 deg and turn 90 deg about the encoder so the connector end points outboard
