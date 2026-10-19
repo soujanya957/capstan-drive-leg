@@ -1,7 +1,7 @@
 """Short films of the v4 quadruped in simulation: the URDF model (model.py) driven by the model-based
 controller (gait.py), filmed from several angles. No learning anywhere.
 
-Run (from fullbuild_v4/mujoco):  python make_videos.py [clip ...]     -> ../video/<clip>.mp4
+Run (from fullbuild_v4/mujoco):  python make_videos.py [--notext] [clip ...]     -> ../video/v4_<clip>[_notext].mp4
 Clips: trot, turn, spin, sidestep, height, gaits, jump, orbit (default: all).
 """
 import math
@@ -73,7 +73,7 @@ def caption(img, title, sub, t, dur):
     return Image.alpha_composite(im, layer).convert("RGB")
 
 
-def film(name):
+def film(name, notext=False):
     title, sub, slow, script, camf = CLIPS[name]
     m = M.build()
     d = mujoco.MjData(m)
@@ -84,7 +84,7 @@ def film(name):
     cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
     OUT.mkdir(exist_ok=True)
-    path = OUT / f"v4_{name}.mp4"
+    path = OUT / f"v4_{name}{'_notext' if notext else ''}.mp4"
     ff = subprocess.Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
                            "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "slow", "-crf", "20",
                            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(path)], stdin=subprocess.PIPE)
@@ -118,7 +118,9 @@ def film(name):
                 cam.distance, cam.azimuth, cam.elevation = dist, az, el
                 r.update_scene(d, cam, opt)
                 r.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = True
-                img = caption(Image.fromarray(r.render()), title, sub, t_sim, dur)
+                img = Image.fromarray(r.render())
+                if not notext:
+                    img = caption(img, title, sub, t_sim, dur)
                 ff.stdin.write(img.tobytes())
                 next_frame += frame_dt
                 n += 1
@@ -131,6 +133,8 @@ def film(name):
 
 
 if __name__ == "__main__":
-    names = sys.argv[1:] or list(CLIPS)
-    ok = [film(nm) for nm in names]
+    args = sys.argv[1:]
+    notext = "--notext" in args
+    names = [a for a in args if a != "--notext"] or list(CLIPS)
+    ok = [film(nm, notext) for nm in names]
     sys.exit(0 if all(ok) else 1)

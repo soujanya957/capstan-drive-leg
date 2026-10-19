@@ -27,6 +27,11 @@ ARMATURE = 1.9e-4 * 81.0                       # 8308 rotor through 9:1
 
 
 def build(urdf=URDF, floor_friction=1.0):
+    return build_spec(urdf, floor_friction).compile()
+
+
+def build_spec(urdf=URDF, floor_friction=1.0):
+    """The model before compiling (web/export_web.py edits it)."""
     urdf = Path(urdf)
     root = ET.parse(urdf).getroot()
     mimics = []                                                       # (joint, of, multiplier)
@@ -113,7 +118,7 @@ def build(urdf=URDF, floor_friction=1.0):
             a = spec.add_actuator(name=name, target=target, trntype=ttype)
             a.ctrllimited, a.ctrlrange, a.gear[0] = mujoco.mjtLimited.mjLIMITED_TRUE, [-TAU, TAU], 1.0
     spec.add_sensor(name="gyro", type=mujoco.mjtSensor.mjSENS_GYRO, objtype=mujoco.mjtObj.mjOBJ_SITE, objname="imu")
-    return spec.compile()
+    return spec
 
 
 if __name__ == "__main__":

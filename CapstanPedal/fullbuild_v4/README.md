@@ -69,7 +69,7 @@ Setup (conda env): [mujoco/SETUP.md](mujoco/SETUP.md). Running it: [mujoco/RUN.m
 ```
 cd fullbuild_v4/mujoco
 python teleop.py          # W/S A/D Q/E R/F, 1-5 gaits, Space jump, G shadows
-python make_videos.py     # ../video/v4_*.mp4
+python make_videos.py     # ../video/v4_*.mp4  (--notext: without captions, v4_*_notext.mp4)
 ```
 
 Films in `video/` (simulation, model-based control, no learning):
@@ -78,6 +78,24 @@ Films in `video/` (simulation, model-based control, no learning):
 - `v4_gaits.mp4` (walk, pace, bound, pronk)
 - `v4_jump.mp4` (half speed)
 - `v4_orbit.mp4`
+
+## In the browser (`web/`)
+
+The same model and controller run on the portfolio site as a keyboard-driven simulator (MuJoCo 3.16 as
+WebAssembly, three.js for drawing). `web/export_web.py` writes what the page loads:
+- `quad.mjb`: the compiled physics model, visual meshes removed. They never collide and have no mass, so the
+  script checks the dynamics are identical step for step before writing it. Binary, because the XML writer
+  rounds to 6 digits and the walk drifts apart after a few seconds.
+- `visual.bin`, `quad.json`: the CAD meshes per body and colour, decimated to ~360k triangles, plus the pod
+  frames and jump parameters the controller reads.
+
+```
+cd fullbuild_v4/mujoco
+python ../web/export_web.py [OUT]   # default OUT: portfolio-website/public/sims/capstan-quad
+```
+
+The site's TypeScript controller is a line-for-line port of `gait.py`. Re-export and re-port it if the model or
+the controller changes: on an 8 s walk, turn, jump and gait change, the two agree to 2e-10 m.
 
 ## Regenerating
 
