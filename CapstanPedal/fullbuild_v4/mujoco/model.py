@@ -65,7 +65,8 @@ def build(urdf=URDF, floor_friction=1.0):
     spec.visual.headlight.diffuse = [0.3, 0.3, 0.3]
     spec.visual.quality.shadowsize = 4096
     spec.visual.map.znear = 0.005
-    spec.visual.map.haze = 0.0                                      # no bright band at the horizon
+    spec.visual.map.haze = 0.15                                     # soft floor-to-sky blend ...
+    spec.visual.rgba.haze = [0.32, 0.36, 0.42, 1.0]                 # ... in the sky's colour (default white flickers)
     spec.visual.global_.offwidth, spec.visual.global_.offheight = 1920, 1080
     spec.stat.extent = 1.5
     spec.stat.center = [0, 0, 0.3]
@@ -92,7 +93,11 @@ def build(urdf=URDF, floor_friction=1.0):
         if j.type == mujoco.mjtJoint.mjJNT_HINGE:
             rotor = "_rotor" in j.name
             j.armature = ARMATURE if j.name.endswith(driven) else 0.0
-            j.damping = [0.0 if rotor else 0.05, 0.0, 0.0]
+            d = 0.0 if rotor else 0.05
+            try:
+                j.damping = [d, 0.0, 0.0]                              # mujoco >= 3.16 (polynomial damping)
+            except TypeError:
+                j.damping = d                                          # older mujoco: scalar
             j.limited = mujoco.mjtLimited.mjLIMITED_FALSE if rotor else mujoco.mjtLimited.mjLIMITED_TRUE
     for jn, of, mult in mimics:                                        # rotors: -9x their output
         spec.add_equality(type=mujoco.mjtEq.mjEQ_JOINT, name1=jn, name2=of, data=[0, mult, 0, 0, 0, 0, 0, 0, 0, 0, 0])
