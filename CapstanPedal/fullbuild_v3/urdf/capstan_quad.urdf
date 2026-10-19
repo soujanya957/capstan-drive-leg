@@ -27,8 +27,6 @@
     <visual><geometry><mesh filename="meshes/torso__brass.stl"/></geometry><material name="brass"/></visual>
     <visual><geometry><mesh filename="meshes/torso__cf.stl"/></geometry><material name="cf"/></visual>
     <visual><geometry><mesh filename="meshes/torso__dimgray.stl"/></geometry><material name="dimgray"/></visual>
-    <visual><geometry><mesh filename="meshes/torso__magnet.stl"/></geometry><material name="magnet"/></visual>
-    <visual><geometry><mesh filename="meshes/torso__motor.stl"/></geometry><material name="motor"/></visual>
     <visual><geometry><mesh filename="meshes/torso__motor_dark.stl"/></geometry><material name="motor_dark"/></visual>
     <visual><geometry><mesh filename="meshes/torso__pcb.stl"/></geometry><material name="pcb"/></visual>
     <visual><geometry><mesh filename="meshes/torso__purple.stl"/></geometry><material name="purple"/></visual>
@@ -45,12 +43,9 @@
     <visual><geometry><mesh filename="meshes/pod_LF__black.stl"/></geometry><material name="black"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__brass.stl"/></geometry><material name="brass"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__dimgray.stl"/></geometry><material name="dimgray"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LF__magnet.stl"/></geometry><material name="magnet"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LF__motor.stl"/></geometry><material name="motor"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__motor_dark.stl"/></geometry><material name="motor_dark"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__red.stl"/></geometry><material name="red"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__screw.stl"/></geometry><material name="screw"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LF__silver.stl"/></geometry><material name="silver"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LF__violet.stl"/></geometry><material name="violet"/></visual>
     <collision><origin xyz="-0.0315 0.0000 0.0300"/><geometry><box size="0.26 0.10 0.17"/></geometry></collision>
@@ -73,6 +68,30 @@
     <visual><geometry><mesh filename="meshes/crank_LF__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/crank_LF__teal.stl"/></geometry><material name="teal"/></visual>
   </link>
+  <link name="rotorA_LF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorA_LF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorB_LF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorB_LF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorC_LF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorC_LF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
   <link name="coupler_LF">
     <inertial><origin xyz="0.06061 0.01509 -0.10083"/><mass value="0.0572"/><inertia ixx="0.00013777" ixy="4.23738e-07" ixz="6.66021e-05" iyy="0.000179031" iyz="-9.49691e-07" izz="4.23388e-05"/></inertial>
     <visual><geometry><mesh filename="meshes/coupler_LF__red.stl"/></geometry><material name="red"/></visual>
@@ -93,12 +112,9 @@
     <visual><geometry><mesh filename="meshes/pod_LR__black.stl"/></geometry><material name="black"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__brass.stl"/></geometry><material name="brass"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__dimgray.stl"/></geometry><material name="dimgray"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LR__magnet.stl"/></geometry><material name="magnet"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LR__motor.stl"/></geometry><material name="motor"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__motor_dark.stl"/></geometry><material name="motor_dark"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__red.stl"/></geometry><material name="red"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__screw.stl"/></geometry><material name="screw"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_LR__silver.stl"/></geometry><material name="silver"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/pod_LR__violet.stl"/></geometry><material name="violet"/></visual>
     <collision><origin xyz="0.0315 0.0000 0.0300"/><geometry><box size="0.26 0.10 0.17"/></geometry></collision>
@@ -121,6 +137,30 @@
     <visual><geometry><mesh filename="meshes/crank_LR__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/crank_LR__teal.stl"/></geometry><material name="teal"/></visual>
   </link>
+  <link name="rotorA_LR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorA_LR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_LR__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorB_LR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorB_LR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_LR__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorC_LR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorC_LR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_LR__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
   <link name="coupler_LR">
     <inertial><origin xyz="0.06061 0.01509 -0.10083"/><mass value="0.0572"/><inertia ixx="0.00013777" ixy="4.23738e-07" ixz="6.66021e-05" iyy="0.000179031" iyz="-9.49691e-07" izz="4.23388e-05"/></inertial>
     <visual><geometry><mesh filename="meshes/coupler_LR__red.stl"/></geometry><material name="red"/></visual>
@@ -141,12 +181,9 @@
     <visual><geometry><mesh filename="meshes/pod_RF__black.stl"/></geometry><material name="black"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__brass.stl"/></geometry><material name="brass"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__dimgray.stl"/></geometry><material name="dimgray"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RF__magnet.stl"/></geometry><material name="magnet"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RF__motor.stl"/></geometry><material name="motor"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__motor_dark.stl"/></geometry><material name="motor_dark"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__red.stl"/></geometry><material name="red"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__screw.stl"/></geometry><material name="screw"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RF__silver.stl"/></geometry><material name="silver"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RF__violet.stl"/></geometry><material name="violet"/></visual>
     <collision><origin xyz="-0.0315 0.0000 0.0300"/><geometry><box size="0.26 0.10 0.17"/></geometry></collision>
@@ -169,6 +206,30 @@
     <visual><geometry><mesh filename="meshes/crank_RF__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/crank_RF__teal.stl"/></geometry><material name="teal"/></visual>
   </link>
+  <link name="rotorA_RF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorA_RF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorB_RF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorB_RF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorC_RF">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorC_RF__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RF__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RF__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RF__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RF__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
   <link name="coupler_RF">
     <inertial><origin xyz="0.05015 -0.01602 -0.08686"/><mass value="0.0238"/><inertia ixx="7.64541e-05" ixy="-2.76482e-08" ixz="4.32434e-05" iyy="0.000102724" iyz="4.78882e-08" izz="2.65209e-05"/></inertial>
     <visual><geometry><mesh filename="meshes/coupler_RF__red.stl"/></geometry><material name="red"/></visual>
@@ -189,12 +250,9 @@
     <visual><geometry><mesh filename="meshes/pod_RR__black.stl"/></geometry><material name="black"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__brass.stl"/></geometry><material name="brass"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__dimgray.stl"/></geometry><material name="dimgray"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RR__magnet.stl"/></geometry><material name="magnet"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RR__motor.stl"/></geometry><material name="motor"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__motor_dark.stl"/></geometry><material name="motor_dark"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__red.stl"/></geometry><material name="red"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__screw.stl"/></geometry><material name="screw"/></visual>
-    <visual><geometry><mesh filename="meshes/pod_RR__silver.stl"/></geometry><material name="silver"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/pod_RR__violet.stl"/></geometry><material name="violet"/></visual>
     <collision><origin xyz="0.0315 0.0000 0.0300"/><geometry><box size="0.26 0.10 0.17"/></geometry></collision>
@@ -216,6 +274,30 @@
     <visual><geometry><mesh filename="meshes/crank_RR__screw.stl"/></geometry><material name="screw"/></visual>
     <visual><geometry><mesh filename="meshes/crank_RR__steel.stl"/></geometry><material name="steel"/></visual>
     <visual><geometry><mesh filename="meshes/crank_RR__teal.stl"/></geometry><material name="teal"/></visual>
+  </link>
+  <link name="rotorA_RR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorA_RR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorA_RR__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorB_RR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorB_RR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorB_RR__steel.stl"/></geometry><material name="steel"/></visual>
+  </link>
+  <link name="rotorC_RR">
+    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>
+    <visual><geometry><mesh filename="meshes/rotorC_RR__magnet.stl"/></geometry><material name="magnet"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RR__motor.stl"/></geometry><material name="motor"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RR__screw.stl"/></geometry><material name="screw"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RR__silver.stl"/></geometry><material name="silver"/></visual>
+    <visual><geometry><mesh filename="meshes/rotorC_RR__steel.stl"/></geometry><material name="steel"/></visual>
   </link>
   <link name="coupler_RR">
     <inertial><origin xyz="0.05015 -0.01602 -0.08686"/><mass value="0.0238"/><inertia ixx="7.64541e-05" ixy="-2.76482e-08" ixz="4.32434e-05" iyy="0.000102724" iyz="4.78882e-08" izz="2.65209e-05"/></inertial>
@@ -242,22 +324,38 @@
     <origin xyz="0.00000 0.07950 -0.00979"/><axis xyz="0 1 0"/>
     <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
   </joint>
+  <joint name="LF_crank" type="revolute">
+    <parent link="pod_LF"/><child link="crank_LF"/>
+    <origin xyz="0.00000 0.07950 -0.00979"/><axis xyz="0 1 0"/>
+    <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
+  </joint>
   <joint name="LF_knee" type="revolute">
     <parent link="thigh_LF"/><child link="shin_LF"/>
     <origin xyz="0.10000 0.00000 -0.17321"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-  </joint>
-  <joint name="LF_crank" type="revolute">
-    <parent link="thigh_LF"/><child link="crank_LF"/>
-    <origin xyz="0.00000 0.00000 0.00000"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="LF_knee" multiplier="1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
   </joint>
   <joint name="LF_coupler" type="revolute">
     <parent link="crank_LF"/><child link="coupler_LF"/>
     <origin xyz="0.04213 0.00000 0.03535"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="LF_knee" multiplier="-1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
+  </joint>
+  <joint name="LF_rotorA" type="revolute">
+    <parent link="pod_LF"/><child link="rotorA_LF"/>
+    <origin xyz="-0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LF_crank" multiplier="-9"/>
+  </joint>
+  <joint name="LF_rotorB" type="revolute">
+    <parent link="pod_LF"/><child link="rotorB_LF"/>
+    <origin xyz="0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LF_hip" multiplier="-9"/>
+  </joint>
+  <joint name="LF_rotorC" type="revolute">
+    <parent link="torso"/><child link="rotorC_LF"/>
+    <origin xyz="0.22150 0.10000 0.02400"/><axis xyz="1 0 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LF_abad" multiplier="-9"/>
   </joint>
   <joint name="LR_abad" type="revolute">
     <parent link="torso"/><child link="pod_LR"/>
@@ -269,22 +367,38 @@
     <origin xyz="0.00000 0.07950 -0.00979"/><axis xyz="0 1 0"/>
     <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
   </joint>
+  <joint name="LR_crank" type="revolute">
+    <parent link="pod_LR"/><child link="crank_LR"/>
+    <origin xyz="0.00000 0.07950 -0.00979"/><axis xyz="0 1 0"/>
+    <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
+  </joint>
   <joint name="LR_knee" type="revolute">
     <parent link="thigh_LR"/><child link="shin_LR"/>
     <origin xyz="0.10000 0.00000 -0.17321"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-  </joint>
-  <joint name="LR_crank" type="revolute">
-    <parent link="thigh_LR"/><child link="crank_LR"/>
-    <origin xyz="0.00000 0.00000 0.00000"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="LR_knee" multiplier="1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
   </joint>
   <joint name="LR_coupler" type="revolute">
     <parent link="crank_LR"/><child link="coupler_LR"/>
     <origin xyz="0.04213 0.00000 0.03535"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="LR_knee" multiplier="-1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
+  </joint>
+  <joint name="LR_rotorA" type="revolute">
+    <parent link="pod_LR"/><child link="rotorA_LR"/>
+    <origin xyz="-0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LR_crank" multiplier="-9"/>
+  </joint>
+  <joint name="LR_rotorB" type="revolute">
+    <parent link="pod_LR"/><child link="rotorB_LR"/>
+    <origin xyz="0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LR_hip" multiplier="-9"/>
+  </joint>
+  <joint name="LR_rotorC" type="revolute">
+    <parent link="torso"/><child link="rotorC_LR"/>
+    <origin xyz="-0.22150 0.10000 0.02400"/><axis xyz="1 0 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="LR_abad" multiplier="-9"/>
   </joint>
   <joint name="RF_abad" type="revolute">
     <parent link="torso"/><child link="pod_RF"/>
@@ -296,22 +410,38 @@
     <origin xyz="0.00000 -0.07950 -0.00979"/><axis xyz="0 1 0"/>
     <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
   </joint>
+  <joint name="RF_crank" type="revolute">
+    <parent link="pod_RF"/><child link="crank_RF"/>
+    <origin xyz="0.00000 -0.07950 -0.00979"/><axis xyz="0 1 0"/>
+    <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
+  </joint>
   <joint name="RF_knee" type="revolute">
     <parent link="thigh_RF"/><child link="shin_RF"/>
     <origin xyz="0.10000 0.00000 -0.17321"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-  </joint>
-  <joint name="RF_crank" type="revolute">
-    <parent link="thigh_RF"/><child link="crank_RF"/>
-    <origin xyz="0.00000 0.00000 0.00000"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="RF_knee" multiplier="1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
   </joint>
   <joint name="RF_coupler" type="revolute">
     <parent link="crank_RF"/><child link="coupler_RF"/>
     <origin xyz="0.04213 0.00000 0.03535"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="RF_knee" multiplier="-1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
+  </joint>
+  <joint name="RF_rotorA" type="revolute">
+    <parent link="pod_RF"/><child link="rotorA_RF"/>
+    <origin xyz="-0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RF_crank" multiplier="-9"/>
+  </joint>
+  <joint name="RF_rotorB" type="revolute">
+    <parent link="pod_RF"/><child link="rotorB_RF"/>
+    <origin xyz="0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RF_hip" multiplier="-9"/>
+  </joint>
+  <joint name="RF_rotorC" type="revolute">
+    <parent link="torso"/><child link="rotorC_RF"/>
+    <origin xyz="0.22150 -0.10000 0.02400"/><axis xyz="1 0 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RF_abad" multiplier="-9"/>
   </joint>
   <joint name="RR_abad" type="revolute">
     <parent link="torso"/><child link="pod_RR"/>
@@ -323,21 +453,37 @@
     <origin xyz="0.00000 -0.07950 -0.00979"/><axis xyz="0 1 0"/>
     <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
   </joint>
+  <joint name="RR_crank" type="revolute">
+    <parent link="pod_RR"/><child link="crank_RR"/>
+    <origin xyz="0.00000 -0.07950 -0.00979"/><axis xyz="0 1 0"/>
+    <limit lower="-1.57080" upper="1.57080" effort="31.5" velocity="23.3"/>
+  </joint>
   <joint name="RR_knee" type="revolute">
     <parent link="thigh_RR"/><child link="shin_RR"/>
     <origin xyz="0.10000 0.00000 -0.17321"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-  </joint>
-  <joint name="RR_crank" type="revolute">
-    <parent link="thigh_RR"/><child link="crank_RR"/>
-    <origin xyz="0.00000 0.00000 0.00000"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="RR_knee" multiplier="1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
   </joint>
   <joint name="RR_coupler" type="revolute">
     <parent link="crank_RR"/><child link="coupler_RR"/>
     <origin xyz="0.04213 0.00000 0.03535"/><axis xyz="0 1 0"/>
-    <limit lower="-1.04720" upper="1.04720" effort="31.5" velocity="23.3"/>
-    <mimic joint="RR_knee" multiplier="-1"/>
+    <limit lower="-1.04720" upper="1.04720" effort="0" velocity="23.3"/>
+  </joint>
+  <joint name="RR_rotorA" type="revolute">
+    <parent link="pod_RR"/><child link="rotorA_RR"/>
+    <origin xyz="-0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RR_crank" multiplier="-9"/>
+  </joint>
+  <joint name="RR_rotorB" type="revolute">
+    <parent link="pod_RR"/><child link="rotorB_RR"/>
+    <origin xyz="0.04675 0.00000 0.06000"/><axis xyz="0 1 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RR_hip" multiplier="-9"/>
+  </joint>
+  <joint name="RR_rotorC" type="revolute">
+    <parent link="torso"/><child link="rotorC_RR"/>
+    <origin xyz="-0.22150 -0.10000 0.02400"/><axis xyz="1 0 0"/>
+    <limit lower="-174.53293" upper="174.53293" effort="3.5" velocity="210"/>
+    <mimic joint="RR_abad" multiplier="-9"/>
   </joint>
 </robot>

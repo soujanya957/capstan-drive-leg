@@ -1,11 +1,13 @@
 """The MuJoCo model of the quadruped, built from the URDF (../urdf/capstan_quad.urdf, made from the CAD by
 build_urdf.py) and completed with what URDF cannot say:
 
-- the drives: motor C on ab/ad, motor B on the hip (output B), motor A on output A = hip + knee (a fixed
-  tendon: the 4-bar's crank turns with the shin's absolute angle). 31.5 N*m each; the controller applies the
-  torque-speed curve and output A's 25 N*m push limit (quad_model / envs: the same motor model as the RL).
-- the 4-bar's other links (crank, coupler) follow the knee through joint equalities (URDF <mimic>).
-- reflected rotor inertia (armature) on every driven joint; output A's +-90 deg travel as the tendon's range.
+- the drives: motor C on ab/ad, motor B on the hip (output B), motor A on the crank (output A, which sets
+  the shin's absolute angle through the parallelogram). 31.5 N*m each; the controller applies the
+  torque-speed curve and output A's 25 N*m push limit (the same motor model as the RL work).
+- the 4-bar's loop: the coupler's far end pinned to the shin's lever pin (a connect equality); knee and
+  coupler are passive joints.
+- the motor rotors (with their small drums) turn at -9x their output: joint equalities (URDF <mimic>).
+- reflected rotor inertia (armature) on the three driven joints.
 - a floor, lights, and the visual meshes kept out of collisions (contacts: body box, pod boxes, link
   capsules, 23 mm ball feet).
 """
@@ -84,21 +86,24 @@ def build(urdf=URDF, floor_friction=1.0):
         foot.condim = 3
         spec.body(f"shin_{p}").add_site(name=f"foot_{p}", pos=foot.pos)
 
+    driven = ("abad", "hip", "crank")
     for j in spec.joints:
         if j.type == mujoco.mjtJoint.mjJNT_HINGE:
-            j.armature = ARMATURE if not j.name.endswith(("crank", "coupler")) else 0.0
-            j.damping = [0.05, 0.0, 0.0]
-            j.limited = mujoco.mjtLimited.mjLIMITED_FALSE if j.name.endswith(("crank", "coupler")) else mujoco.mjtLimited.mjLIMITED_TRUE
-    for jn, of, mult in mimics:                                        # the 4-bar's crank and coupler
-        spec.add_equality(type=mujoco.mjtEq.mjEQ_JOINT, name1=jn, name2=of, data=[0, mult, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                          solref=[0.005, 1.0])
-    for p in PODS:
-        t = spec.add_tendon(name=f"{p}_outA", limited=mujoco.mjtLimited.mjLIMITED_TRUE, range=[-math.pi / 2, math.pi / 2])
-        t.wrap_joint(f"{p}_hip", 1.0)
-        t.wrap_joint(f"{p}_knee", 1.0)
-        for name, target, ttype in ((f"{p}_mC", f"{p}_abad", mujoco.mjtTrn.mjTRN_JOINT),
-                                    (f"{p}_mB", f"{p}_hip", mujoco.mjtTrn.mjTRN_JOINT),
-                                    (f"{p}_mA", f"{p}_outA", mujoco.mjtTrn.mjTRN_TENDON)):
+            rotor = "_rotor" in j.name
+            j.armature = ARMATURE if j.name.endswith(driven) else 0.0
+            j.damping = [0.0 if rotor else 0.05, 0.0, 0.0]
+            j.limited = mujoco.mjtLimited.mjLIMITED_FALSE if rotor else mujoco.mjtLimited.mjLIMITED_TRUE
+    for jn, of, mult in mimics:                                        # rotors: -9x their output
+        spec.add_equality(type=mujoco.mjtEq.mjEQ_JOINT, name1=jn, name2=of, data=[0, mult, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    import json
+    frames = json.load(open(urdf.parent / "frames.json"))
+    for p in PODS:                                                     # close the parallelogram
+        spec.add_equality(type=mujoco.mjtEq.mjEQ_CONNECT, name1=f"coupler_{p}", name2=f"shin_{p}",
+                          objtype=mujoco.mjtObj.mjOBJ_BODY,
+                          data=list(frames[p]["lever_on_coupler"]) + list(frames[p]["lever_on_shin"]) + [0] * 5,
+                          solref=[0.004, 1.0])
+        for name, target in ((f"{p}_mC", f"{p}_abad"), (f"{p}_mB", f"{p}_hip"), (f"{p}_mA", f"{p}_crank")):
+            ttype = mujoco.mjtTrn.mjTRN_JOINT
             a = spec.add_actuator(name=name, target=target, trntype=ttype)
             a.ctrllimited, a.ctrlrange, a.gear[0] = mujoco.mjtLimited.mjLIMITED_TRUE, [-TAU, TAU], 1.0
     spec.add_sensor(name="gyro", type=mujoco.mjtSensor.mjSENS_GYRO, objtype=mujoco.mjtObj.mjOBJ_SITE, objname="imu")

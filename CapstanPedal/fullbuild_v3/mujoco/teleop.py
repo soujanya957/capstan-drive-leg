@@ -4,6 +4,7 @@ model-based trot controller (gait.py), in real time.
   W / S    forward / back            A / D    side-step left / right
   Q / E    turn left / right         R / F    body up / down (hold)
   Space    jump                      Shift    run (forward and turn x1.6)
+  1 - 5    gait: trot, walk, pace, bound, pronk (changes once the feet are down)
   [ / ]    slower / faster time      P  pause     X  reset     C  camera follow
   G        shadows on/off            V  collision shapes
   mouse    left drag orbit, right drag pan, scroll zoom                           Esc  quit
@@ -38,6 +39,8 @@ def main():
     def on_key(key, mods):
         if key == glfw.KEY_SPACE:
             c.jump()
+        elif glfw.KEY_1 <= key <= glfw.KEY_5:
+            c.request_gait(G.GAIT_KEYS[key - glfw.KEY_1])
         elif key == glfw.KEY_X:
             c.reset_pose()
         elif key == glfw.KEY_P:
@@ -88,8 +91,10 @@ def main():
         if now - t_fps > 0.5:
             fps, frames, t_fps = frames / (now - t_fps), 0, now
         R, Rrp, vb, w, roll, pitch = c.body()
-        mode = ("jump: " + c.jump_state["phase"]) if c.jump_state else ("trot" if c.walking else "stand")
-        hud_l = ("W/S forward-back   A/D side-step   Q/E turn   R/F height\n"
+        mode = ("jump: " + c.jump_state["phase"]) if c.jump_state else (c.gait if c.walking else f"stand ({c.gait})")
+        if getattr(c, "pending", None):
+            mode += f" -> {c.pending}"
+        hud_l = ("W/S forward-back   A/D side-step   Q/E turn   R/F height\n1 trot  2 walk  3 pace  4 bound  5 pronk\n"
                  "Space jump   Shift run   [ ] time speed   P pause   X reset\nC follow   G shadows   V collision shapes   Esc quit")
         hud_r = (f"{'PAUSED' if clock.paused else f'time x{clock.speed:g}'}   {fps:.0f} fps\n"
                  f"command  {cmd[0]:+.2f} m/s  {cmd[1]:+.2f} m/s  {cmd[2]:+.2f} rad/s\n"

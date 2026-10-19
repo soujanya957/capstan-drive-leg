@@ -1,21 +1,27 @@
 """URDF of the Capstan quadruped v3 from its CAD (the film meshes generate_quad.py writes: mujoco/meshes).
 
-Links per leg, as the mechanism moves (v9.1's 4-bar is a parallelogram):
-  pod_X    the ab/ad-turning module: motor plate, front wall, both motors, gantry, ab/ad drum ...
-  thigh_X  output B: drum B, flange B, the thigh, the knee pin
-  crank_X  output A: drum A, flange A, the crank, the crank pin. It turns with the shin's ABSOLUTE angle,
-           so relative to the thigh it turns with the knee: <mimic joint="knee"/>
-  coupler_X  stays parallel to the thigh: relative to the crank, <mimic joint="knee" multiplier="-1"/>
-  shin_X   shin, its plates, the foot, the lever pin
-The torso is everything else (body, cassette, and the ab/ad motors C, which ride the body).
+Links per leg, as the mechanism moves:
+  pod_X      the ab/ad-turning module: motor plate, front wall, both motor stators, gantry, ab/ad drum ...
+  thigh_X    output B (joint X_hip): drum B, flange B, the thigh, the knee pin
+  crank_X    output A (joint X_crank, ABSOLUTE, coaxial with the hip): drum A, flange A, the crank
+  coupler_X  on the crank pin (passive joint X_coupler)
+  shin_X     on the knee (passive joint X_knee): shin, plates, foot, lever pin
+  rotorA_X, rotorB_X   motor A and B rotors with their small drums: <mimic> the output they drive, x -9
+                       (the 9:1 capstan; the rotor turns the other way)
+  rotorC_X   motor C's rotor and small drum (on the body, about X): <mimic> X_abad, x -9
+The 4-bar is a closed loop (crank - coupler - shin - thigh, a parallelogram): URDF cannot close it, so the
+coupler's far end and the shin's lever pin are listed in frames.json ("lever_on_coupler", "lever_on_shin")
+and the MuJoCo model (mujoco/model.py) pins them together. Driven joints: X_abad (motor C), X_hip (motor B),
+X_crank (motor A); 31.5 N*m each.
 
-Joints (axes in the body frame, the robot walks toward -X): abad about +X (+-20 deg), hip about +Y (output B,
-+-90), knee about +Y (+-60 from rest: software limits on the robot). Output A = hip + knee (a tendon in the
-MuJoCo model, sim_model.py). Joint zero = the CAD's rest pose: thigh 60 deg below horizontal, knee bent 60.
+Joint zero = the CAD's rest pose: thigh 60 deg below horizontal, shin 120 (knee bent 60). Axes in the body
+frame (the robot walks toward -X): abad +X (+-20 deg), hip and crank +Y (+-90: the capstans' travel),
+knee +Y (+-60 from rest: software limits on the robot).
 
-Visual meshes: one STL per link per colour (metres, link frame). Collision: primitives (box body, capsule
-links, 23 mm ball feet). Inertia: each part's mesh as a solid of its material's density (motors and the
-battery by catalogue mass), summed per link.
+Visual meshes: one STL per link per colour (metres, link frame), decimated for display. Collision:
+primitives (box body, capsule links, 23 mm ball feet). Inertia: each part's mesh as a solid of its
+material's density (motors and battery by catalogue mass), summed per link; the rotors' mass is booked to
+the pod (or body) that carries them, and their inertia to the driven joints as reflected inertia in MuJoCo.
 
 Run: python build_urdf.py [mesh_dir]     -> capstan_quad.urdf, meshes/
 """
@@ -70,11 +76,23 @@ def link_of(v):
     if "pod" not in v:
         return "torso"
     kind, rides = qf.classify(v)
+    p = v["pod"]
+    if kind == "abadspin":
+        return f"rotorC_{p}"
     if not rides:
         return "torso"
-    p = v["pod"]
     return {"spin:B": "thigh", "joint:knee": "thigh", "spin:A": "crank", "joint:crank": "crank",
-            "coupler": "coupler", "shin": "shin", "joint:lever": "shin"}.get(kind, "pod") + "_" + p
+            "coupler": "coupler", "shin": "shin", "joint:lever": "shin",
+            "spin:mA": "rotorA", "spin:mB": "rotorB"}.get(kind, "pod") + "_" + p
+
+
+def mass_link(ln):
+    """Where a link's mass is booked: the rotors' on what carries them."""
+    if ln.startswith(("rotorA", "rotorB")):
+        return "pod_" + ln.split("_")[1]
+    if ln.startswith("rotorC"):
+        return "torso"
+    return ln
 
 
 def decimate(tri, cell):
@@ -118,7 +136,12 @@ def frames(meta):
         knee = np.array([sh[0] + mv.L4_K0[0], 0.0, mv.L4_K0[1]])
         crank = np.array([sh[0] + mv.L4_C0[0], 0.0, mv.L4_C0[1]])
         foot = np.array([sh[0] + mv.L4_F0[0], 0.0, mv.L4_F0[1]])
-        out[p] = {n: x / 1000.0 for n, x in (("ab", ab), ("hip", hip), ("knee", knee), ("crank", crank), ("foot", foot))}
+        lever = np.array([sh[0] + mv.L4_D0[0], 0.0, mv.L4_D0[1]])
+        mA = np.array([sh[0] + mv.MA[0], ab[1], mv.MA[1]])
+        mB = np.array([sh[0] + mv.MB[0], ab[1], mv.MB[1]])
+        mC = D @ (np.array(mv.AB_C, float) + np.array([0.0, 0.0, 84.0])) + sh
+        out[p] = {n: x / 1000.0 for n, x in (("ab", ab), ("hip", hip), ("knee", knee), ("crank", crank), ("foot", foot),
+                                             ("lever", lever), ("mA", mA), ("mB", mB), ("mC", mC))}
     return out
 
 
@@ -136,6 +159,9 @@ def main(mesh_dir=None):
         origin[f"pod_{p}"] = np.array([F[p]["hip"][0], F[p]["ab"][1], F[p]["ab"][2]])
         origin[f"thigh_{p}"] = np.array([F[p]["hip"][0], leg_y[p], F[p]["hip"][2]])
         origin[f"crank_{p}"] = origin[f"thigh_{p}"]
+        origin[f"rotorA_{p}"] = F[p]["mA"]
+        origin[f"rotorB_{p}"] = F[p]["mB"]
+        origin[f"rotorC_{p}"] = F[p]["mC"]
         origin[f"coupler_{p}"] = np.array([F[p]["crank"][0], leg_y[p], F[p]["crank"][2]])
         origin[f"shin_{p}"] = np.array([F[p]["knee"][0], leg_y[p], F[p]["knee"][2]])
     groups, inert = {}, {}
@@ -147,10 +173,11 @@ def main(mesh_dir=None):
         groups.setdefault((ln, v["color"]), []).append(t)
         vol, com, I1 = mass_props(tris[k] / 10.0)                      # cm: density in g/cm^3
         m = FIXED_G.get(v["color"], vol * DENSITY.get(v["color"], 1.2)) / 1000.0     # kg
-        com_m = com / 100.0 - origin[ln]
+        mln = mass_link(ln)
+        com_m = com / 100.0 - origin[mln]
         I = I1 * m * 1e-4                                               # kg m^2
-        M, C, J = inert.get(ln, (0.0, np.zeros(3), np.zeros((3, 3))))
-        inert[ln] = (M + m, C + m * com_m, J + I + m * (np.dot(com_m, com_m) * np.eye(3) - np.outer(com_m, com_m)))
+        M, C, J = inert.get(mln, (0.0, np.zeros(3), np.zeros((3, 3))))
+        inert[mln] = (M + m, C + m * com_m, J + I + m * (np.dot(com_m, com_m) * np.eye(3) - np.outer(com_m, com_m)))
     md = HERE / "meshes"
     md.mkdir(exist_ok=True)
     for f in md.glob("*.stl"):
@@ -167,6 +194,8 @@ def main(mesh_dir=None):
     print({ln: round(v[0], 3) for ln, v in inert.items()}, "total", round(sum(v[0] for v in inert.values()), 2), "kg")
 
     def inertial(ln):
+        if ln not in inert:                                             # a rotor: its mass is on its carrier
+            return '    <inertial><mass value="0.001"/><inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/></inertial>\n'
         m, mc, J = inert[ln]
         com = mc / m
         Jc = J - m * (np.dot(com, com) * np.eye(3) - np.outer(com, com))   # about the com
@@ -204,6 +233,8 @@ def main(mesh_dir=None):
         links.append(f'  <link name="thigh_{p}">\n' + inertial(f"thigh_{p}") + vis(f"thigh_{p}") +
                      capsule((0, 0, 0), (knee_t[0], 0, knee_t[2]), 0.014) + '  </link>\n')
         links.append(f'  <link name="crank_{p}">\n' + inertial(f"crank_{p}") + vis(f"crank_{p}") + '  </link>\n')
+        for r in "ABC":
+            links.append(f'  <link name="rotor{r}_{p}">\n' + inertial(f"rotor{r}_{p}") + vis(f"rotor{r}_{p}") + '  </link>\n')
         links.append(f'  <link name="coupler_{p}">\n' + inertial(f"coupler_{p}") + vis(f"coupler_{p}") + '  </link>\n')
         foot_s = F[p]["foot"] - F[p]["knee"]
         links.append(f'  <link name="shin_{p}">\n' + inertial(f"shin_{p}") + vis(f"shin_{p}") +
@@ -220,14 +251,20 @@ def main(mesh_dir=None):
         rel = lambda a, b: o[a] - o[b]
         j(f"{p}_abad", "torso", f"pod_{p}", o[f"pod_{p}"], "1 0 0", -20, 20)
         j(f"{p}_hip", f"pod_{p}", f"thigh_{p}", rel(f"thigh_{p}", f"pod_{p}"), "0 1 0", -90, 90)
-        j(f"{p}_knee", f"thigh_{p}", f"shin_{p}", rel(f"shin_{p}", f"thigh_{p}"), "0 1 0", -60, 60)
-        j(f"{p}_crank", f"thigh_{p}", f"crank_{p}", rel(f"crank_{p}", f"thigh_{p}"), "0 1 0", -60, 60, (f"{p}_knee", 1))
-        j(f"{p}_coupler", f"crank_{p}", f"coupler_{p}", rel(f"coupler_{p}", f"crank_{p}"), "0 1 0", -60, 60, (f"{p}_knee", -1))
+        j(f"{p}_crank", f"pod_{p}", f"crank_{p}", rel(f"crank_{p}", f"pod_{p}"), "0 1 0", -90, 90)
+        j(f"{p}_knee", f"thigh_{p}", f"shin_{p}", rel(f"shin_{p}", f"thigh_{p}"), "0 1 0", -60, 60, eff=0)
+        j(f"{p}_coupler", f"crank_{p}", f"coupler_{p}", rel(f"coupler_{p}", f"crank_{p}"), "0 1 0", -60, 60, eff=0)
+        j(f"{p}_rotorA", f"pod_{p}", f"rotorA_{p}", rel(f"rotorA_{p}", f"pod_{p}"), "0 1 0", -1e4, 1e4, (f"{p}_crank", -9), eff=3.5, vel=210)
+        j(f"{p}_rotorB", f"pod_{p}", f"rotorB_{p}", rel(f"rotorB_{p}", f"pod_{p}"), "0 1 0", -1e4, 1e4, (f"{p}_hip", -9), eff=3.5, vel=210)
+        j(f"{p}_rotorC", "torso", f"rotorC_{p}", o[f"rotorC_{p}"], "1 0 0", -1e4, 1e4, (f"{p}_abad", -9), eff=3.5, vel=210)
     mats = "".join(f'  <material name="{c_}"><color rgba="{r:.3f} {g:.3f} {b:.3f} {a:.1f}"/></material>\n'
                    for c_, (r, g, b, a) in sorted(RGBA.items()) if any(c_ == col for v in visuals.values() for _, col in v))
     urdf = (f'<?xml version="1.0"?>\n<!-- Capstan quadruped v3 (v9.1 legs): generated by build_urdf.py from the CAD -->\n'
             f'<robot name="capstan_quad">\n{mats}{"".join(links)}{"".join(joints)}</robot>\n')
     (HERE / "capstan_quad.urdf").write_text(urdf)
+    for p in PODS:                                                      # the 4-bar's loop closure, per leg
+        F[p]["lever_on_coupler"] = F[p]["lever"] - F[p]["crank"]
+        F[p]["lever_on_shin"] = F[p]["lever"] - F[p]["knee"]
     json.dump({p: {k: v.tolist() for k, v in F[p].items()} | {"leg_y": leg_y[p]} for p in PODS},
               open(HERE / "frames.json", "w"), indent=1)
     print(f"capstan_quad.urdf: {len(links)} links, {len(joints)} joints, {sum(len(v) for v in visuals.values())} visual meshes, "

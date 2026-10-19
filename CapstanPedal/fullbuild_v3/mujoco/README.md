@@ -20,35 +20,60 @@ python watch_assembly.py --speed=0.25
 | A / D | side-step left / right (0.3 m/s) |
 | Q / E | turn left / right (0.8 rad/s; Shift 1.3) |
 | R / F | body up / down (hold): hip 26 to 38.5 cm above the feet |
+| 1 – 5 | gait: trot, walk, pace, bound, pronk (changes once all four feet are down, then carries on) |
 | Space | jump |
 | [ / ] | slower / faster time (0.05× to 2×); P pause; X reset |
 | C | camera follow; G shadows (about half the frame rate); V collision shapes |
 | mouse | left drag orbit, right drag pan, scroll zoom; Esc quits |
 
-**The model** (`model.py`) is built from `../urdf/capstan_quad.urdf`. Its links are the parts that move
-together: torso, and per leg the pod (ab/ad), thigh (output B), crank (output A), coupler and shin. The 4-bar's
-crank and coupler follow the knee through joint equalities (the URDF's `<mimic>`). Motor A drives output A =
-hip + knee. Motors: 31.5 N·m, falling off from half the no-load speed, output A limited to 25 N·m when it
-pushes the coupler (the same motor model as `rl/`). Contacts are primitives (body box, pod boxes, link
-capsules, 23 mm ball feet). Mass 19.2 kg from the CAD.
+**The model** (`model.py`) is built from `../urdf/capstan_quad.urdf` (33 links). Each leg has:
+- **Driven links:** the pod (ab/ad, motor C), the thigh (output B, motor B) and the crank (output A, motor A,
+  coaxial with the hip).
+- **The 4-bar:** the coupler on the crank pin and the shin on the knee. The URDF can't close the loop, so
+  the MuJoCo model pins the coupler's far end to the shin's lever pin (it holds to 0.003 mm).
+- **Rotors:** every motor's rotor and small drum turns at −9× its output (URDF `<mimic>`, MuJoCo joint
+  equalities). That includes motor C's rotor on the body.
 
-**The controller** (`gait.py`) uses no learning. It trots with a 0.25 s cycle, each foot down 60 % of it.
+Motors: 31.5 N·m, falling off from half the no-load speed, output A limited to 25 N·m when it pushes the
+coupler (the same motor model as `rl/`). Contacts are primitives (body box, pod boxes, link capsules, 23 mm
+ball feet). Mass 19.2 kg from the CAD.
+
+**Inverse kinematics** (`gait.py`, `Leg.ik`):
+- **Method:** analytic (ab/ad, then the 2-link leg in its plane, on the rest pose's knee branch).
+- **Limits:** where a target breaks a joint limit (ab/ad ±19°, both outputs ±88°, the knee's soft ±52°) or is
+  out of reach, damped least squares projected onto the limits returns the nearest reachable foot position.
+- **Checked:** exact round trips over about 14,000 poses; no limit broken for 8,000 out-of-reach targets;
+  FK matches MuJoCo to 0.01 mm.
+- **Used everywhere:** walking, swing, crouch, push and landing.
+
+**The controller** (`gait.py`) uses no learning:
 - **Feet:** targets are set in a level heading frame, so the body stays level. Stance feet hold their spot
   on the ground; swing feet land half a stance ahead (Raibert).
-- **Legs:** full 3-D inverse kinematics (ab/ad, then the 2-link leg), PD on the drive outputs, and each
-  stance leg carries its share of the weight plus a roll/pitch correction.
+- **Legs:** PD on the drive outputs, and each stance leg carries its share of the weight plus a roll/pitch
+  correction.
+- **Leaping gaits** (bound, pronk): each stance pushes a half-sine impulse that carries the weight over the
+  time the feet are down.
 
-It stands still with no command. In simulation it tracks 0.5, 1.0 and −0.3 m/s, 0.3 m/s sideways and
-0.8 rad/s turning to within a few hundredths, with under 3° of body tilt (under 10° at the height extremes).
+Five gaits, each tuned by a sweep in simulation. Peak body tilt and velocity error (rms) over 0.4 / 0.8 /
+−0.25 m/s, 0.25 m/s sideways and 0.6 rad/s turning:
 
-**The jump** is the scripted jump (crouch, force-controlled push at 66°, swing to a landing pose fixed in
-the world, soft landing). Its parameters (`jump_params.json`) were tuned by random search on this model with
-mass ±10 % and friction 0.6–1.25. On 30 settings it was not tuned on:
-- 28 of 30 land and stand; 2 fall.
-- It travels about 0.6 m.
-- A shin brushes the floor on 11 of the landings.
-- Peak foot force is about 1,000 N, more than twice the RL model's landings. Treat it as a demo, not a
-  load case the legs are checked for.
+| Gait | Footfalls | Cycle | Tilt | Error |
+|---|---|---|---|---|
+| trot | diagonal pairs | 0.22 s | 3.1° | 0.07 m/s |
+| walk | one foot at a time (hind-left, fore-left, hind-right, fore-right) | 0.45 s | 3.3° | 0.12 |
+| pace | same-side pairs | 0.22 s | 4.2° | 0.16 (turns at about half the command) |
+| bound | fore pair, then hind pair | 0.24 s | 6.4° | 0.11 (turns at about 70 %) |
+| pronk | all four together, with flight | 0.28 s | 7.7° | 0.07 |
+
+**The jump** is the scripted jump: crouch, force-controlled push at 65° with a fixed front/rear split and
+pitch feedback, swing to a landing pose fixed in the world, soft landing. Its parameters
+(`jump_params.json`) were tuned by random search on this model with mass ±10 % and friction 0.6–1.25. On 30
+settings it was not tuned on:
+- 28 of 30 land and stand; 1 falls and 1 doesn't settle in time.
+- It travels 0.51–0.86 m (mean 0.67).
+- A shin brushes the floor on 1 landing.
+- Peak foot force is 630 N, about 1.5× the RL model's landings. Treat it as a demo, not a load case the legs
+  are checked for.
 
 ## watch_assembly.py
 
