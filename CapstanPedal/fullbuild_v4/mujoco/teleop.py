@@ -57,7 +57,7 @@ def main():
             st["shapes"] = not st["shapes"]
             v.opt.geomgroup[3] = st["shapes"]
 
-    v = Viewer(m, d, "Capstan quadruped v3: teleop", max_geom=2000, on_key=on_key)
+    v = Viewer(m, d, "Capstan quadruped v4: teleop", max_geom=2000, on_key=on_key)
     v.opt.geomgroup[:] = [1, 1, 1, 0, 0, 0]
     v.shadows = False                                                   # G: shadows (about half the frame rate)
     v.cam.distance, v.cam.elevation, v.cam.azimuth = 2.0, -18.0, 120.0

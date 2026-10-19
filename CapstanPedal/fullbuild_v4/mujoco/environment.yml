@@ -1,0 +1,10 @@
+# conda env for the v4 simulation:  conda env create -f environment.yml   (see SETUP.md)
+name: capstan-sim
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - ffmpeg                    # make_videos.py
+  - pip:
+      - -r requirements.txt

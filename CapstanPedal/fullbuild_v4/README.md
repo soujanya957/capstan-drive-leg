@@ -64,6 +64,8 @@ Controller (`mujoco/gait.py`):
   ±10 %, friction 0.6–1.25) it lands and stands **30 of 30**: 0.55–0.81 m (mean 0.70), peak foot force
   580 N, no shin or body contact.
 
+Setup (conda env): [mujoco/SETUP.md](mujoco/SETUP.md). Running it: [mujoco/RUN.md](mujoco/RUN.md).
+
 ```
 cd fullbuild_v4/mujoco
 python teleop.py          # W/S A/D Q/E R/F, 1-5 gaits, Space jump, G shadows
