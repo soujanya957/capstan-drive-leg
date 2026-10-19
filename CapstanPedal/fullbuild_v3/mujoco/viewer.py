@@ -27,6 +27,7 @@ class Viewer:
         self.opt = mujoco.MjvOption()
         self.pert = mujoco.MjvPerturb()
         self.on_key = on_key
+        self.shadows = True                                         # off: about twice the frame rate
         self._btn, self._last = None, (0.0, 0.0)
         glfw.set_key_callback(self.win, self._key)
         glfw.set_mouse_button_callback(self.win, self._button)
@@ -82,6 +83,7 @@ class Viewer:
         vp = mujoco.MjrRect(0, 0, w, h)
         mujoco.mjv_updateScene(self.model, self.data, self.opt, self.pert, self.cam,
                                mujoco.mjtCatBit.mjCAT_ALL, self.scn)
+        self.scn.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = self.shadows
         if add_geoms:
             add_geoms(self.scn)
         mujoco.mjr_render(vp, self.scn, self.ctx)

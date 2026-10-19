@@ -77,6 +77,26 @@ def link_of(v):
             "coupler": "coupler", "shin": "shin", "joint:lever": "shin"}.get(kind, "pod") + "_" + p
 
 
+def decimate(tri, cell):
+    """Vertex clustering: snap vertices to a grid of `cell` (m), merge, drop collapsed and repeated triangles.
+    Visual meshes only (inertia comes from the full CAD); CAD hardware is mostly fine thread and fillet facets."""
+    v = tri.reshape(-1, 3)
+    key = np.floor(v / cell).astype(np.int64)
+    uk, inv = np.unique(key, axis=0, return_inverse=True)
+    inv = inv.ravel()
+    sums = np.zeros((len(uk), 3))
+    np.add.at(sums, inv, v)
+    rep = sums / np.bincount(inv, minlength=len(uk))[:, None]
+    f = inv.reshape(-1, 3)
+    keep = (f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])
+    f = f[keep]
+    _, first = np.unique(np.sort(f, axis=1), axis=0, return_index=True)
+    return rep[f[np.sort(first)]]
+
+
+HARDWARE = ("screw", "brass", "steel", "silver", "magnet")
+
+
 def write_stl(path, tri):
     with open(path, "wb") as f:
         f.write(b"\0" * 80 + struct.pack("<I", len(tri)))
@@ -136,9 +156,13 @@ def main(mesh_dir=None):
     for f in md.glob("*.stl"):
         f.unlink()
     visuals = {}
+    n_full = n_small = 0
     for (ln, col), ts in sorted(groups.items()):
         name = f"{ln}__{col}.stl"
-        write_stl(md / name, np.concatenate(ts).astype(np.float32))
+        full = np.concatenate(ts)
+        small = decimate(full, 0.0010 if col in HARDWARE else 0.0006)
+        write_stl(md / name, small.astype(np.float32))
+        n_full, n_small = n_full + len(full), n_small + len(small)
         visuals.setdefault(ln, []).append((name, col))
     print({ln: round(v[0], 3) for ln, v in inert.items()}, "total", round(sum(v[0] for v in inert.values()), 2), "kg")
 
@@ -206,8 +230,8 @@ def main(mesh_dir=None):
     (HERE / "capstan_quad.urdf").write_text(urdf)
     json.dump({p: {k: v.tolist() for k, v in F[p].items()} | {"leg_y": leg_y[p]} for p in PODS},
               open(HERE / "frames.json", "w"), indent=1)
-    ntri = sum(len(np.concatenate(ts)) for ts in groups.values())
-    print(f"capstan_quad.urdf: {len(links)} links, {len(joints)} joints, {sum(len(v) for v in visuals.values())} visual meshes, {ntri} triangles")
+    print(f"capstan_quad.urdf: {len(links)} links, {len(joints)} joints, {sum(len(v) for v in visuals.values())} visual meshes, "
+          f"{n_small} triangles (decimated from {n_full})")
 
 
 if __name__ == "__main__":

@@ -808,7 +808,7 @@ def ref_motor(which):
 
 
 def ref_moteus(which):
-    b = import_step(os.path.join(REF, "v0", "files", "moteousr4.step"))
+    b = import_step(os.path.join(REF, "ref_cad", "moteousr4.step"))
     x, z = MA if which == "A" else MB
     # STEP: PCB in XZ (y 0..1.65), motor side toward -Y, encoder at (0, 8); flip to face +Y,
     # then flip 180 deg and turn 90 deg about the encoder so the connector end points outboard
