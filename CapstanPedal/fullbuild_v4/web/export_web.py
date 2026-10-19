@@ -136,6 +136,7 @@ def main():
         frames={p: {k: frames[p][k] for k in ("ab", "hip", "leg_y")} for p in M.PODS},
         jump=jp,
         mass=float(m_phys.body_subtreemass[m_phys.body("torso").id]),
+        triangles=dict(drawn=n_tri, cad=total),
     ), indent=1))
     print(f"{OUT}: quad.mjb {(OUT / 'quad.mjb').stat().st_size / 1e6:.2f} MB, visual.bin {len(blob) / 1e6:.2f} MB, "
           f"{len(meta)} chunks, {n_tri} of {total} triangles")
