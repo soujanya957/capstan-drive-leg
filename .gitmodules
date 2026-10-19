@@ -1,0 +1,9 @@
+[submodule "CapstanPedal/Capstan-Drive"]
+	path = CapstanPedal/Capstan-Drive
+	url = https://github.com/aaedmusa/Capstan-Drive.git
+[submodule "CapstanPedal/OpenQDD-V1"]
+	path = CapstanPedal/OpenQDD-V1
+	url = https://github.com/aaedmusa/OpenQDD-V1.git
+[submodule "CapstanPedal/TOPS"]
+	path = CapstanPedal/TOPS
+	url = https://github.com/aaedmusa/TOPS.git

@@ -1,0 +1,10 @@
+# teleop_dog.py (physics only)
+mujoco==3.16.0
+glfw==2.10.2
+numpy==2.5.4
+gymnasium==1.4.0
+stable-baselines3==2.9.0
+torch==2.14.1
+# watch_assembly.py and teleop_dog.py --cad also import the CAD code (src/make_quad_film.py -> generate_quad.py)
+build123d==0.13.0
+pillow

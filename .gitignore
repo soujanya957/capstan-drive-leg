@@ -1,0 +1,5 @@
+.DS_Store
+__pycache__/
+*.pyc
+CapstanPedal/fullbuild_v3/rl/runs/
+CapstanPedal/fullbuild_v3/mujoco/preview/
