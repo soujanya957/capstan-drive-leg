@@ -97,6 +97,15 @@ python ../web/export_web.py [OUT]   # default OUT: portfolio-website/public/sims
 The site's TypeScript controller is a line-for-line port of `gait.py`. Re-export and re-port it if the model or
 the controller changes: on an 8 s walk, turn, jump and gait change, the two agree to 2e-10 m.
 
+## Learned control (`rl/`, `rl2/`)
+
+- `rl/`: the first RL walking controller (PPO on GPU worlds, idealised sensors), and the first SGS experiments.
+- `rl2/`: policies that see only what the built robot will measure (IMU, encoders, and a new optical-flow +
+  range sensor pair, see `BOM.md` "Sensing"), with noise, dropouts and delay. Five skills: walk, rear up,
+  handstand, balance on a board on a ball, a blind terrain course. Deployable policies in `rl2/policies/`. What we
+  did and learned: `rl2/sgs-lessons.md`. A new build reuses rl2 unchanged if its URDF keeps the same names:
+  `rl2/README.md`, "A new build version". Training runs on a GPU box (cake), not here.
+
 ## Regenerating
 
 ```

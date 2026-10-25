@@ -1,0 +1,13 @@
+walk --task=walk --sampler=uniform --steps=300
+rear --task=rear --sampler=uniform --steps=300
+handstand --task=handstand --sampler=uniform --steps=300
+balance --task=balance --sampler=uniform --steps=500
+terrain_uniform_s0 --task=terrain --sampler=uniform --seed=0 --steps=400
+terrain_sgs_s0 --task=terrain --sampler=sgs --sgs_h=100 --seed=0 --steps=400
+terrain_sgsp_s0 --task=terrain --sampler=sgsp --sgs_h=16 --seed=0 --steps=400
+terrain_uniform_s1 --task=terrain --sampler=uniform --seed=1 --steps=400
+terrain_sgs_s1 --task=terrain --sampler=sgs --sgs_h=100 --seed=1 --steps=400
+terrain_sgsp_s1 --task=terrain --sampler=sgsp --sgs_h=16 --seed=1 --steps=400
+terrain_uniform_s2 --task=terrain --sampler=uniform --seed=2 --steps=400
+terrain_sgs_s2 --task=terrain --sampler=sgs --sgs_h=100 --seed=2 --steps=400
+terrain_sgsp_s2 --task=terrain --sampler=sgsp --sgs_h=16 --seed=2 --steps=400

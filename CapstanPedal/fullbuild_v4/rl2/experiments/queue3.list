@@ -1,0 +1,8 @@
+balance2 --task=balance --sampler=uniform --steps=500
+terrain_sgs2_s0 --task=terrain --sampler=sgs --sgs_h=100 --seed=0 --steps=400
+terrain_sgs2_s1 --task=terrain --sampler=sgs --sgs_h=100 --seed=1 --steps=400
+terrain_sgs2_s2 --task=terrain --sampler=sgs --sgs_h=100 --seed=2 --steps=400
+handstand2 --task=handstand --sampler=uniform --steps=300
+terrain_sgsp2_s0 --task=terrain --sampler=sgsp --sgs_h=16 --seed=0 --steps=400
+terrain_sgsp2_s1 --task=terrain --sampler=sgsp --sgs_h=16 --seed=1 --steps=400
+terrain_sgsp2_s2 --task=terrain --sampler=sgsp --sgs_h=16 --seed=2 --steps=400

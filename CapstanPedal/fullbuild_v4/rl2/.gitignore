@@ -1,0 +1,8 @@
+policies/*
+!policies/walk2_best.npz
+!policies/rear_best.npz
+!policies/handstand2_best.npz
+!policies/balance2_best.npz
+!policies/terrain_uniform_s0_best.npz
+logs/
+__pycache__/

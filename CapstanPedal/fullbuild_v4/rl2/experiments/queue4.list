@@ -1,0 +1,10 @@
+terrain_curr_s0 --task=terrain --sampler=curr --std_max=0.5 --ent_end=0 --seed=0 --steps=400
+terrain_curr_s1 --task=terrain --sampler=curr --std_max=0.5 --ent_end=0 --seed=1 --steps=400
+terrain_curr_s2 --task=terrain --sampler=curr --std_max=0.5 --ent_end=0 --seed=2 --steps=400
+handstand3 --task=handstand --sampler=uniform --std_max=0.5 --ent_end=0 --steps=300
+handstand3c --task=handstand --sampler=uniform --std_max=0.5 --ent_end=0 --cat=0.25 --steps=300
+terrain_fix_s0 --task=terrain --sampler=uniform --std_max=0.5 --ent_end=0 --seed=0 --steps=400
+terrain_fix_s1 --task=terrain --sampler=uniform --std_max=0.5 --ent_end=0 --seed=1 --steps=400
+terrain_fix_s2 --task=terrain --sampler=uniform --std_max=0.5 --ent_end=0 --seed=2 --steps=400
+balance3 --task=balance --sampler=curr --std_max=0.5 --ent_end=0 --steps=500
+rear2 --task=rear --sampler=uniform --std_max=0.5 --ent_end=0 --steps=300
