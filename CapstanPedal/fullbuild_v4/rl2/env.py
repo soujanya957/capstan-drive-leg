@@ -129,8 +129,11 @@ class CpuEnv:
             return task.first_obs(C.state(L, qpos, qvel, site_xpos), aux, cfg, key)
         self._reset = jax.jit(task.reset)
         self._begin = jax.jit(task.begin)
+        def priv0(qpos, qvel, site_xpos, aux, cfg):
+            return task.priv_now(C.state(L, qpos, qvel, site_xpos), aux, cfg)
         self._post = jax.jit(post)
         self._first = jax.jit(first)
+        self._priv0 = jax.jit(priv0)
         self.key = jax.random.PRNGKey(0)
 
     def _k(self):
@@ -154,6 +157,7 @@ class CpuEnv:
             mujoco.mj_forward(m, d)
             self.aux, self.cfg = aux, cfg
             self.aux, obs = self._first(d.qpos, d.qvel, d.site_xpos, aux, cfg, self._k())
+            self.priv = np.asarray(self._priv0(d.qpos, d.qvel, d.site_xpos, self.aux, cfg))   # a teacher's extra input
             return np.asarray(obs)
 
     def step(self, action):
@@ -176,6 +180,7 @@ class CpuEnv:
                 tau_sum += np.abs(tau)
             aux = dict(aux, prev_target=jp.asarray(target))
             out = self._post(d.qpos, d.qvel, d.site_xpos, aux, self.cfg, jp.asarray(a), jp.asarray(tau_sum / C.DECIM), self._k())
-            self.aux, obs, _, r, terms, done, _, success, fallen, err = out
+            self.aux, obs, priv, r, terms, done, _, success, fallen, err = out
+            self.priv = np.asarray(priv)
             return (np.asarray(obs), float(r), {k: float(v) for k, v in terms.items()}, bool(done), bool(success),
                     bool(fallen), float(err))
