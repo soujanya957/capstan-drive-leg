@@ -9,3 +9,4 @@ One run per line: `<name> <train.py options>`. Run a batch on cake with `sh run_
 | `queue2.list` | 2026-10-24 | walk2: walk retrained with flow-sensor failures (`hw.FLOW_DEAD`) |
 | `queue3.list` | 2026-10-24 | After the Codex review: SGS bookkeeping fix (3+3 seeds), balance with corrected sensors, handstand reward reshaped |
 | `queue4.list` | 2026-10-24 | Noise cap + entropy anneal, level curriculum (`--sampler=curr`), constraints as terminations (`--cat`) |
+| `queue5.list` | 2026-10-26 | Terrain teacher–student: a teacher that sees a height scan of the course, its blind student (`distill.py`), and a blind PPO control with the same critic |

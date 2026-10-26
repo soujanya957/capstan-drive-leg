@@ -23,6 +23,12 @@ success were not caused by the noise. Both default off.
 probability up to p_max when a constraint is broken (tasks.Pose.end), which costs the rewards it would have
 collected. Only in training worlds; held-out evaluation and the CPU model never end an episode this way.
 
+--teacher=1: the actor also reads the privileged state the critic reads (tasks.Terrain: a height scan of the course,
+foot heights, true velocity, friction, mass, motor strength, delays), through a small encoder to a latent of 16
+numbers (Lee et al. 2020, "Learning quadrupedal locomotion over challenging terrain"; Kumar et al. 2021, RMA). The
+robot has no such sensors, so a teacher is not deployable: distill.py trains a blind student to act like it. A
+teacher run also keeps policies/snaps/<name>/<steps>M.pkl at each held-out evaluation, to distill from its best.
+
 Reward tuning: every reward term is logged on its own (logs/<name>.csv, columns r.<term>: its weighted mean per
 step), and any weight can be set from the command line or a JSON file:
     python train.py --task=walk --w=slip=-0.5,air=2.0 --name=walk_try
@@ -54,8 +60,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OPT = dict(task="walk", steps=300.0, envs=8192, cfgs=1040, eval_every=50, eval_n=4160, sampler="sgs", name="", init="", seed=0, bank_seed=0, save=50,
            unroll=24, epochs=5, minibatches=4, gamma=0.99, lam=0.95, clip=0.2, ent=0.004, vf=1.0, lr=1e-3, kl=0.01,
            sgs_t=0.66, sgs_k=5.0, sgs_temp=2.0, sgs_h=100, sgs_eps=1e-8, sgs_prior=0, w="", w_file="", nacon=24, njmax=160,
-           std_max=0.0, ent_end=-1.0, curr_mix=0.1, cat=0.0)                 # std_max 0: no cap; ent_end < 0: constant
+           std_max=0.0, ent_end=-1.0, curr_mix=0.1, cat=0.0, teacher=0)                 # std_max 0: no cap; ent_end < 0: constant
 ACTOR, CRITIC = (512, 256, 128), (512, 256, 128)
+ENC, LATENT = (64,), 16                                                 # a teacher's encoder of the privileged state
 
 
 def options():
@@ -95,6 +102,44 @@ def mlp(ps, x):
 
 def normalise(norm, x):
     return jp.clip((x - norm["mean"]) / jp.sqrt(norm["var"] + 1e-8), -10.0, 10.0)
+
+
+def split_norm(norm, n_obs):
+    return (dict(mean=norm["mean"][:n_obs], var=norm["var"][:n_obs]), dict(mean=norm["mean"][n_obs:], var=norm["var"][n_obs:]))
+
+
+def actor_mean(p, norm, ob, pv):
+    """The policy's mean action. A teacher (p has "enc") also reads the privileged state pv; returns (action, latent)."""
+    n_obs = ob.shape[-1]
+    nm_o, nm_p = split_norm(norm, n_obs)
+    x = normalise(nm_o, ob)
+    z = mlp(p["enc"], normalise(nm_p, pv)) if "enc" in p else jp.zeros(ob.shape[:-1] + (0,))
+    return mlp(p["actor"], jp.concatenate([x, z], -1)), z
+
+
+def make_evaluate(task, o, act):
+    """Held-out evaluation: a different bank (seed bank_seed + 1000), every configuration once, the mean action, first
+    episode only. act(params, norm, obs, priv) -> action. Returns evaluate(params, norm, key) -> success per episode."""
+    n_ev = o["eval_n"]
+    bank_ev = task.bank(n_ev, o["bank_seed"] + 1000)
+    env_ev = E.GpuEnv(task, n_ev, o["nacon"], o["njmax"])
+    step_ev = jax.vmap(env_ev.step, in_axes=(env_ev.in_axes, 0, 0, 0, None, 0))
+
+    @jax.jit
+    def evaluate(params, norm, key):
+        k1, k2 = jax.random.split(key)
+        d, aux, mp, ob, pv = env_ev.start(bank_ev, jp.arange(n_ev), k1)
+        mxb = env_ev.mx.tree_replace(mp)
+
+        def body(c, k):
+            d, aux, ob, pv, over, ok = c
+            a = act(params, norm, ob, pv)
+            d, aux, ob, pv, _, _, done, _, success, _, _ = step_ev(mxb, d, aux, a, bank_ev, jax.random.split(k, n_ev))
+            ok = ok | (~over & success)
+            return (d, aux, ob, pv, over | done, ok), None
+        (*_, ok), _ = jax.lax.scan(body, (d, aux, ob, pv, jp.zeros(n_ev, bool), jp.zeros(n_ev, bool)), jax.random.split(k2, task.EP))
+        return ok
+    return evaluate, bank_ev
 
 
 def norm_update(norm, x):
@@ -178,8 +223,12 @@ def main():
     key = jax.random.PRNGKey(o["seed"])
     n_obs, n_in = C.N_OBS, C.N_OBS + task.N_PRIV
     key, ka, kc = jax.random.split(key, 3)
-    params = dict(actor=mlp_init(ka, (n_obs,) + ACTOR + (12,), 0.01), critic=mlp_init(kc, (n_in,) + CRITIC + (1,), 1.0),
+    key, ke = jax.random.split(key)
+    n_lat = LATENT if o["teacher"] else 0
+    params = dict(actor=mlp_init(ka, (n_obs + n_lat,) + ACTOR + (12,), 0.01), critic=mlp_init(kc, (n_in,) + CRITIC + (1,), 1.0),
                   log_std=jp.full(12, -1.0))
+    if o["teacher"]:
+        params["enc"] = mlp_init(ke, (task.N_PRIV,) + ENC + (LATENT,), 1.0)
     norm = dict(mean=jp.zeros(n_in), var=jp.ones(n_in), count=jp.float32(1e-4))
     sgs = dict(hist=jp.zeros((n_cfg + 1, o["sgs_h"])), count=jp.zeros(n_cfg + 1, jp.int32))
     curr = o["sampler"] == "curr"
@@ -199,54 +248,20 @@ def main():
     terms0 = list(task.w)
 
     # --- the worlds ---
-    d = env.make_data()
-    key, k1, k2, k3 = jax.random.split(key, 4)
+    key, k1, k2 = jax.random.split(key, 3)
     cfg0 = curr_pick(sgs["lvl"], c_table, c_count, n_cfg, o["curr_mix"], k1) if curr else jax.random.randint(k1, (n,), 0, n_cfg)
-    reset_v = jax.vmap(env.reset_slot, in_axes=(None, 0, 0))
-    qpos, qvel, aux, mp = reset_v(bank, cfg0, jax.random.split(k2, n))
-    mp, dp = E.split(mp)
-    d = d.replace(qpos=qpos, qvel=qvel, **dp)
-    aux, obs = jax.vmap(env.first_obs, in_axes=(0, 0, None, 0))(d, aux, bank, jax.random.split(k3, n))
-    aux = dict(aux, cat=jp.full(n, o["cat"], jp.float32))               # constraints as terminations: training only
-    priv = jp.zeros((n, task.N_PRIV))
+    cat = jp.full(n, o["cat"], jp.float32)                              # constraints as terminations: training only
+    d, aux, mp, obs, priv = env.start(bank, cfg0, k2, cat=cat)
     step_v = jax.vmap(env.step, in_axes=(env.in_axes, 0, 0, 0, None, 0))
-    first_v = jax.vmap(env.first_obs, in_axes=(0, 0, None, 0))
-
-    # --- held-out evaluation: a different bank, every configuration equally, the mean action, first episode only ---
-    bank_ev = task.bank(o["eval_n"], o["bank_seed"] + 1000)
-    n_ev = o["eval_n"]
-    env_ev = E.GpuEnv(task, n_ev, o["nacon"], o["njmax"])
-    step_ev = jax.vmap(env_ev.step, in_axes=(env_ev.in_axes, 0, 0, 0, None, 0))
-
-    @jax.jit
-    def evaluate(params, norm, key):
-        d = env_ev.make_data()
-        k1, k2, k3 = jax.random.split(key, 3)
-        q, v, aux, mp = jax.vmap(env_ev.reset_slot, in_axes=(None, 0, 0))(bank_ev, jp.arange(n_ev), jax.random.split(k1, n_ev))
-        mp, dp = E.split(mp)
-        d = d.replace(qpos=q, qvel=v, **dp)
-        aux, ob = jax.vmap(env_ev.first_obs, in_axes=(0, 0, None, 0))(d, aux, bank_ev, jax.random.split(k2, n_ev))
-        mxb = env_ev.mx.tree_replace(mp)
-
-        def body(c, k):
-            d, aux, ob, over, ok = c
-            a = actor_mean(params, norm, ob)
-            d, aux, ob, _, _, _, done, _, success, _, _ = step_ev(mxb, d, aux, a, bank_ev, jax.random.split(k, n_ev))
-            ok = ok | (~over & success)
-            return (d, aux, ob, over | done, ok), None
-        (_, _, _, _, ok), _ = jax.lax.scan(body, (d, aux, ob, jp.zeros(n_ev, bool), jp.zeros(n_ev, bool)), jax.random.split(k3, task.EP))
-        return ok
+    evaluate, bank_ev = make_evaluate(task, o, lambda p, nm, ob, pv: actor_mean(p, nm, ob, pv)[0])
 
     def value(p, nm, ob, pv):
         return mlp(p["critic"], normalise(nm, jp.concatenate([ob, pv], -1)))[..., 0]
 
-    def actor_mean(p, nm, ob):
-        return mlp(p["actor"], normalise(dict(mean=nm["mean"][:n_obs], var=nm["var"][:n_obs]), ob))
-
     def rollout(carry, _, p, nm):
         d, aux, mp, obs, priv, sgs, key = carry
-        key, k_a, k_s, k_r, k_c, k_o = jax.random.split(key, 6)
-        mu = actor_mean(p, nm, obs)
+        key, k_a, k_s, k_r, k_c = jax.random.split(key, 5)
+        mu, _ = actor_mean(p, nm, obs, priv)
         std = jp.exp(p["log_std"])
         a = mu + std * jax.random.normal(k_a, mu.shape)
         logp = jp.sum(-0.5 * ((a - mu) / std) ** 2 - p["log_std"] - 0.5 * jp.log(2 * jp.pi), -1)
@@ -265,23 +280,13 @@ def main():
             new_cfg = jax.random.categorical(k_c, logits / o["sgs_temp"], shape=(n,))
         else:
             new_cfg = jax.random.randint(k_c, (n,), 0, n_cfg)
-        q_r, v_r, aux_r, mp_r = reset_v(bank, new_cfg, jax.random.split(k_r, n))
-        aux_r = dict(aux_r, cat=jp.full(n, o["cat"], jp.float32))
-        mp_r, dp_r = E.split(mp_r)
-        sel = lambda new, old: jp.where(done.reshape((n,) + (1,) * (old.ndim - 1)), new, old)   # noqa: E731
-        d2 = d2.replace(qpos=sel(q_r, d2.qpos), qvel=sel(v_r, d2.qvel), qacc_warmstart=sel(jp.zeros_like(d2.qacc_warmstart), d2.qacc_warmstart),
-                        ctrl=sel(jp.zeros_like(d2.ctrl), d2.ctrl), **{k: sel(v, getattr(d2, k)) for k, v in dp_r.items()})
-        aux_f, obs_f = first_v(d2, aux_r, bank, jax.random.split(k_o, n))
-        aux2 = jax.tree_util.tree_map(sel, aux_f, aux2)
-        mp = jax.tree_util.tree_map(sel, mp_r, mp)
-        obs_n = sel(obs_f, obs2)
-        priv_n = sel(jp.zeros_like(priv2), priv2)
+        d2, aux2, mp, obs_n, priv_n = env.respawn(bank, d2, aux2, mp, obs2, priv2, done, new_cfg, k_r, cat=cat)
         tr = dict(obs=obs, priv=priv, a=a, logp=logp, v=v, r=r, done=done, success=success & done, fallen=fallen & done,
                   err=err, terms=terms)
         return (d2, aux2, mp, obs_n, priv_n, sgs, key), tr
 
     def loss_fn(p, nm, b, ent_c):
-        mu = actor_mean(p, nm, b["obs"])
+        mu, _ = actor_mean(p, nm, b["obs"], b["priv"])
         std = jp.exp(p["log_std"])
         logp = jp.sum(-0.5 * ((b["a"] - mu) / std) ** 2 - p["log_std"] - 0.5 * jp.log(2 * jp.pi), -1)
         ratio = jp.exp(logp - b["logp"])
@@ -387,14 +392,19 @@ def main():
             with open(os.path.join(HERE, "logs", f"{o['name']}_eval.jsonl"), "a") as f:
                 f.write(json.dumps(dict(it=it, steps=steps, success=float(ok.mean()), table=table)) + "\n")
             print(f"   eval {steps / 1e6:6.1f} M  held-out success {ok.mean():.3f}", flush=True)
-            export(params, norm, o["task"], os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M.npz"))
+            snap = os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M")
+            export(params, norm, o["task"], snap + ".npz")
+            if o["teacher"]:
+                pickle.dump(dict(params=jax.tree_util.tree_map(np.asarray, params), norm=jax.tree_util.tree_map(np.asarray, norm),
+                                 it=it + 1, task=o["task"]), open(snap + ".pkl", "wb"))
         if (it + 1) % o["save"] == 0 or it == it0 + n_it - 1:
             save(o, task, params, norm, carry[5], bank, it + 1)
     print("saved", o["name"], flush=True)
 
 
 def export(params, norm, task_name, path):
-    """The deployable policy: actor weights and observation normalisation, numpy only (policy.py), ~1 MB."""
+    """The deployable policy: actor weights and observation normalisation, numpy only (policy.py), ~1 MB. A teacher's
+    file is marked kind=teacher (it needs the privileged state: policy.py refuses it; distill.py makes its student)."""
     to_np = lambda t: jax.tree_util.tree_map(np.asarray, t)              # noqa: E731
     a = to_np(params["actor"])
     out = {f"mlp_extractor_policy_net_{2 * i}_weight": Wt for i, (Wt, b) in enumerate(a[:-1])}
@@ -402,7 +412,7 @@ def export(params, norm, task_name, path):
     nm = to_np(norm)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     np.savez(path, obs_mean=nm["mean"][:C.N_OBS], obs_var=nm["var"][:C.N_OBS], clip_obs=10.0, epsilon=1e-8,
-             action_net_weight=a[-1][0], action_net_bias=a[-1][1], task=task_name, **out)
+             action_net_weight=a[-1][0], action_net_bias=a[-1][1], task=task_name, kind="teacher" if "enc" in params else "mlp", **out)
 
 
 def save(o, task, params, norm, sgs, bank, it):

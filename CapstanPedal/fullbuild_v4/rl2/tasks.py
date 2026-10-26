@@ -46,6 +46,7 @@ class Task:
     N_PRIV_TASK = 6
     N_PRIV = 16 + N_PRIV_TASK
     clock = False
+    obs_hist = C.N_HIST                          # frames in the observation: N_LONG for a distilled student
 
     def __init__(self, weights=None):
         self.w = dict(self.WEIGHTS)
@@ -70,7 +71,7 @@ class Task:
         return dict(cmd=jp.zeros(3), phase=jax.random.uniform(k1), clock_on=jp.bool_(self.clock), last_a=jp.zeros(12),
                     prev_target=jp.asarray(self.L.default), t=jp.int32(0), cfg=jp.int32(i), feet_prev=jp.zeros((4, 3)),
                     kp=jp.asarray(C.KP) * cfg["kp_s"], kd=jp.asarray(C.KD) * cfg["kd_s"], strength=cfg["strength"],
-                    w0=cfg["w0_s"], sens=C.sensor_draw(k2), hist=jp.zeros((C.N_HIST, C.N_FRAME)),
+                    w0=cfg["w0_s"], sens=C.sensor_draw(k2), hist=jp.zeros((C.N_LONG, C.N_FRAME)),
                     cat=jp.float32(0.0))                              # train.py sets it in training worlds (--cat)
 
     def qpos0(self, p, yaw):
@@ -91,8 +92,8 @@ class Task:
     def observe(self, s, aux, cfg, key, first=False):
         gz, gv = self.surface(s, cfg)
         frame, sens = C.sense(self.L, s, aux, gz, key, gv)
-        hist = jp.where(first, jp.tile(frame, (C.N_HIST, 1)), jp.concatenate([aux["hist"][1:], frame[None]], 0))
-        return dict(aux, sens=sens, hist=hist), hist.ravel()
+        hist = jp.where(first, jp.tile(frame, (C.N_LONG, 1)), jp.concatenate([aux["hist"][1:], frame[None]], 0))
+        return dict(aux, sens=sens, hist=hist), hist[-self.obs_hist:].ravel()
 
     def first_obs(self, s, aux, cfg, key):
         return self.observe(s, aux, cfg, key, first=True)
@@ -102,6 +103,15 @@ class Task:
         return jp.concatenate([s["v"], jp.array([h - self.L.z_stand]), contact.astype(jp.float32),
                                jp.array([cfg["fric"], cfg["mass_add"], cfg["strength"], cfg["kp_s"], cfg["kd_s"], cfg["w0_s"],
                                          aux["sens"]["delay"] / 10.0, aux["sens"]["flow_scale"]]), extra])
+
+    def extra(self, s, aux, cfg, feet=True):
+        """The task's part of the privileged state (N_PRIV_TASK). feet=False: right after a reset, before the foot
+        positions are updated."""
+        return jp.zeros(self.N_PRIV_TASK)
+
+    def priv_now(self, s, aux, cfg):
+        """The privileged state at the first step of an episode (train.py: the critic, and a teacher's actor)."""
+        return self.priv(s, aux, cfg, jp.ones(4, bool), self.extra(s, aux, cfg, feet=False))
 
     def begin(self, aux, cfg, qvel):
         """Before the physics of a step: a shove."""
@@ -272,10 +282,18 @@ def course(kind, level, r):
 
 class Terrain(Task):
     """Walk the course straight ahead at the commanded speed (an operator steers: sideways and turn commands hold
-    the robot on the course's centreline). Success = reach the goal, 85 % of speed x 8 s down the course."""
+    the robot on the course's centreline). Success = reach the goal, 85 % of speed x 8 s down the course.
+
+    Privileged state (the critic's, and a teacher's input: train.py --teacher=1): a height scan of the course around
+    the body, 10 points from 0.3 m behind to 1.05 m ahead x 3 across, and each foot's height over the ground under it.
+    The robot has no sensor for either; a blind student learns to act like the teacher from what it feels (distill.py)."""
     name = "terrain"
     extras = ("terrain",)
     clock = True
+    SCAN_FWD = np.linspace(-0.3, 1.05, 10)
+    SCAN_SIDE = np.array([-0.12, 0.0, 0.12])
+    N_PRIV_TASK = len(SCAN_FWD) * len(SCAN_SIDE) + 4
+    N_PRIV = 16 + N_PRIV_TASK
     WEIGHTS = dict(track_lin=1.5, track_yaw=0.5, gait=0.3, air=1.0, bounce=-0.5, angvel=-0.05, tilt=-2.0, height=-5.0,
                    torque=-2e-4, action_rate=-0.01, slip=-0.2, fall=-10.0, success=10.0)
 
@@ -305,6 +323,16 @@ class Terrain(Task):
         z = self.ground(cfg, 0.0, cfg["y0"]) + L.z0
         return self.qpos0(jp.array([0.0, cfg["y0"], z]), cfg["yaw0"]), jp.zeros(L.nv), aux, self.mparams(cfg) | self.mocap(cfg)
 
+    def extra(self, s, aux, cfg, feet=True):
+        yaw = jp.arctan2(s["R"][1, 0], s["R"][0, 0])
+        fwd, side = -jp.array([jp.cos(yaw), jp.sin(yaw)]), jp.array([-jp.sin(yaw), jp.cos(yaw)])
+        pts = (s["p"][:2] + jp.asarray(self.SCAN_FWD)[:, None, None] * fwd + jp.asarray(self.SCAN_SIDE)[None, :, None] * side).reshape(-1, 2)
+        gz = jax.vmap(lambda q: self.ground(cfg, q[0], q[1]))(pts)
+        scan = (s["p"][2] - gz - self.L.z_stand) * 5.0
+        fz = jax.vmap(lambda f: self.ground(cfg, f[0], f[1]))(s["feet"])
+        clear = jp.clip((s["feet"][:, 2] - fz - C.G.FOOT_R) * 10.0, -1.0, 3.0) * feet
+        return jp.concatenate([scan, clear])
+
     def end(self, s, aux, cfg, a, tau, key):
         L = self.L
         t = aux["t"] + 1
@@ -327,9 +355,8 @@ class Terrain(Task):
         yaw = jp.arctan2(s["R"][1, 0], s["R"][0, 0])
         nxt = jp.array([jp.minimum(cmd[0] + 0.04, cfg["v_cmd"]), jp.clip(-1.5 * s["p"][1], -0.3, 0.3), jp.clip(-2.0 * yaw, -1.0, 1.0)])
         aux = dict(aux, cmd=nxt, phase=phase, air=jp.where(contact, 0.0, aux["air"] + C.DT * C.DECIM))
-        ahead = jp.array([self.ground(cfg, s["p"][0] - d, s["p"][1]) for d in (0.25, 0.5, 0.75, 1.0)]) - gz
-        extra = jp.concatenate([ahead * 5.0, jp.array([cfg["level"] / 10.0, cfg["kind"] / 8.0])])
-        return self.finish(s, aux, cfg, a, raw, contact, fallen, success, trunc, extra, key, progress / cfg["goal"])
+        return self.finish(s, aux, cfg, a, raw, contact, fallen, success, trunc, self.extra(s, aux, cfg), key,
+                           progress / cfg["goal"])
 
 
 # =====================================================================================================================

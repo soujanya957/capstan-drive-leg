@@ -30,6 +30,7 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
 | Handstand on the front legs | `handstand2_best` | 82 % | ~60° target, smooth margin reward; weak robot only 10–30 % |
 | Balance on a board on a ball | `balance2_best` | 39.5 % | 100 % at level 0 (damped ball), 0 % at level 9; on cake only |
 | Blind terrain course | `terrain_uniform_s0_best` | 75.5 % | stairs, slopes, obstacles; gaps past level 0 never crossed |
+| Blind terrain course, distilled | `terrain_student_s0_best` | 77.0 % | student of a teacher that saw the course; stable, no late slump; reads 1 s of sensor history (~2 MB) |
 
 **What worked.**
 - **Checkpoint selection** was the biggest single gain: terrain 50.5 → 73.5 % (mean of 3 seeds), handstand2
@@ -38,6 +39,8 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
 - **Fixing the sensor model** (balance): the old policy scores 0 % under the corrected sensors; retrained 39.5 %.
 - **Reshaping the handstand reward** (target above the success bar, smooth margin term): best 35 → 82 %.
 - **Plain uniform sampling** of the scenario bank.
+- **Teacher–student** (Experiment 5): no gain in peak success for a blind robot (77.0 % vs 77.0 %), but the student
+  does not slump: its last snapshot scores 74.5 % where the blind PPO run's last scores 55.5 %.
 
 **What didn't.**
 - **SGS**: 14 runs over three experiments; never beat uniform, and lost by 15–20 points on terrain (details below).
@@ -52,7 +55,9 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
 1. Why training success falls after ~70 M steps on terrain, handstand and balance (learning rate, the value
    network, what the reward pays for late in training).
 2. Curriculum promotion by distance covered, not success.
-3. Teacher–student training for terrain (a teacher that sees the terrain, a blind student that imitates it).
+3. ~~Teacher–student training for terrain~~ done (Experiment 5). What it showed: gaps need a sensor that looks
+   ahead. A forward-facing multi-zone range sensor (e.g. VL53L5CX, 8×8 zones) and a student that reads a few
+   of the teacher's scan points is the next step there.
 4. Terrain test closer to the real robot: a delayed, noisy operator (~0.3 s, 10 Hz, deadband, limits), a ±0.6 m
    corridor, a fixed-distance finish.
 5. Constraints with limits measured from a working policy, switched on gradually; a longer sensor history and wider
@@ -184,3 +189,44 @@ With best checkpoints the ranking holds: uniform 73.5 %, SGS with prior 60.8 % (
 - Same batch, other skills (best snapshots, CPU): handstand3 (noise cap) 66 % vs 82 %; handstand3c (noise cap +
   constraint termination at 85 % torque) 0 %; balance3 (curriculum + cap) 35 % vs 39.5 %, mean level 2.6 and
   rising when it stopped; rear2 (cap) 98 % vs 100 %. Deployable policies unchanged.
+
+## Experiment 5: teacher–student on terrain (rl2/, queue5, 2026-10-26)
+
+- **Teacher** (`train.py --teacher=1`): PPO whose policy also reads the privileged state through an encoder to 16
+  numbers. That is a height scan of the course (10 points from 0.3 m behind to 1.05 m ahead × 3 across), each
+  foot's height over the ground, the true velocity, friction, added mass, motor strength, gains and delay. The
+  critic reads the same (before, it had 4 heights ahead and the course type and level).
+- **Student** (`distill.py`, Lee et al. 2020, RMA): blind. It reads 1 s of its own sensors (50 frames) and
+  estimates the teacher's 16 numbers from them, then acts through a copy of the teacher's policy network. It is
+  trained by imitation with DAgger: the student drives (the teacher drives some steps over the first 20 %),
+  and the loss is the difference from the teacher's action and latent. No reward. 200 M steps, ~20 min.
+- **Control**: blind PPO with the same new critic, same seed, 400 M steps (`terrain_blind_s0`).
+
+| | Held-out, GPU (4,160) | Best snapshot, CPU (200) | Last snapshot, CPU (200) | Gaps (GPU) |
+|---|---|---|---|---|
+| Teacher (sees the course) | **80.9 %** at 59 M, 44.9 % at the end | not deployable | – | **52 %** |
+| Student (blind, distilled) | 78.3 % at 103 M, 63–78 % over the whole run | **77.0 %** | **74.5 %** | 12 % |
+| Blind PPO control | 70.7 % at 108 M, 55 % at the end | **77.0 %** | 55.5 % | 11 % |
+| Earlier blind best (`terrain_uniform_s0`) | 71.5 % | 75.5 % | – | 14 % |
+
+Per terrain type (GPU held-out, best snapshots): teacher / student / blind: flat .95/.97/.96, rough .96/.98/.91,
+slope .93/.94/.88, stairs up .94/.86/.74, stairs down .55/.72/.72, gaps .52/.12/.11, obstacles .78/.83/.77,
+mixed .83/.62/.56.
+
+What we learned:
+- **Seeing the course is worth ~10 points, and nearly all of it is gaps** (52 % vs 11 %; the teacher crosses gaps
+  to level 7) **and mixed courses**. A blind robot cannot know a gap is there until a foot falls into it, so the
+  student cannot copy that. Its latent error stays high (8.8, from 20), because it cannot predict the scan ahead.
+- **The student keeps what can be felt**: stairs up 86 % vs 74 % blind, rough, slope and obstacles a little better.
+- **Distillation is stable where PPO is not.** The teacher slumped like every PPO run (81 → 45 %) and the blind
+  control too (71 → 55 %). The student, trained on its best snapshot, stayed between 63 and 78 % for the whole run,
+  and its final snapshot is nearly as good as its best. On the stress audit (last snapshots, 24 cells × 10
+  episodes), student 76 % vs blind 59 %. Supervised learning has no moving target, which is a hint for the late slumps:
+  they come from the RL loop, not from the network or the task.
+- **Peak blind success did not move**: 77.0 % for both on the CPU test (200 episodes, ±3 points). The blind control
+  with the new critic also beat the earlier blind best (75.5 %): a scan in the critic may help PPO itself.
+- Practical: `terrain_student_s0_best` is the new deployable terrain policy (same score, robust late, ~2 MB, numpy;
+  policy.py runs it on 50 frames of history). Teacher snapshots are on cake only.
+- Next: a forward-looking range sensor so the student gets part of the scan (gaps); 3 seeds of teacher and student;
+  distilling from a teacher trained longer at a low learning rate.
+

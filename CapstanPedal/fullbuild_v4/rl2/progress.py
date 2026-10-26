@@ -77,7 +77,7 @@ def main():
     snaps = sorted((HERE / "policies" / "snaps" / name).glob("*M.npz"))
     st = stats(name)
     picks = [snaps[int(round(k))] for k in np.linspace(0, len(snaps) - 1, n)]
-    task = E.make_task(str(np.load(picks[0])["task"]))
+    task = E.task_for(picks[0])
     ce = E.CpuEnv(task)
     cfg = scenario(task)
     r = mujoco.Renderer(ce.m, H, W)

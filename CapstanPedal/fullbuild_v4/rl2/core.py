@@ -45,6 +45,7 @@ HIND, FRONT = np.array([0, 2]), np.array([1, 3])
 N_FRAME = 51                                    # one observation frame (sense())
 N_HIST = 3                                      # frames stacked into the policy's input
 N_OBS = N_FRAME * N_HIST
+N_LONG = 50                                     # frames kept (1 s): what a distilled student reads (distill.py)
 CMD_SCALE = np.array([2.0, 2.0, 0.25])
 
 # terrain course: rows of boxes along the robot's forward direction (-X), two columns, tilted for slopes

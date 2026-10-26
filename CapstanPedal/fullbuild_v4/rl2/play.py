@@ -28,9 +28,8 @@ WALK_SCRIPT = [(1.5, (0.0, 0.0, 0.0)), (4.0, (0.6, 0.0, 0.0)), (3.0, (1.0, 0.0, 
 
 
 def load(name):
-    z = np.load(HERE / "policies" / f"{name}.npz")
-    task = E.make_task(str(z["task"]))
-    return P.Policy(HERE / "policies" / f"{name}.npz"), task
+    path = HERE / "policies" / f"{name}.npz"
+    return P.Policy(path), E.task_for(path)
 
 
 def row(bank, i):

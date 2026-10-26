@@ -1,0 +1,3 @@
+terrain_teacher_s0 --task=terrain --sampler=uniform --teacher=1 --seed=0 --steps=400
+terrain_student_s0 distill.py --teacher=terrain_teacher_s0 --steps=200
+terrain_blind_s0 --task=terrain --sampler=uniform --seed=0 --steps=400

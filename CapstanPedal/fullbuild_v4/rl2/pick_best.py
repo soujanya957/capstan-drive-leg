@@ -13,8 +13,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import numpy as np
-
 import env as E
 import play
 import policy as P
@@ -53,7 +51,7 @@ def main():
     last = max(snaps)
     if last not in picks:
         picks.append(last)
-    task = E.make_task(str(np.load(snaps[last])["task"]))
+    task = E.task_for(snaps[last])
     ce = E.CpuEnv(task)
     bank = task.bank(n, 3000)
     gpu = {int(e["steps"] // 1_000_000): e["success"] for e in ev}

@@ -4,5 +4,6 @@ policies/*
 !policies/handstand2_best.npz
 !policies/balance2_best.npz
 !policies/terrain_uniform_s0_best.npz
+!policies/terrain_student_s0_best.npz
 logs/
 __pycache__/

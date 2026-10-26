@@ -10,7 +10,8 @@ rates, noise, biases, dropouts and a 4–20 ms control delay. No policy input co
 | `core.py` | The robot: models (GPU "physics" and CPU "full"), PD + motor model, firmware limits, `sense()` (one observation frame), terrain height |
 | `tasks.py` | The tasks, their scenario banks, reward terms and success tests: `walk`, `terrain`, `rear`, `handstand`, `balance` |
 | `env.py` | A task on thousands of GPU worlds (`GpuEnv`) or one CPU world in the full model (`CpuEnv`) |
-| `train.py` | PPO + SGS / uniform sampling, per-term reward logging, held-out evaluation every 50 iterations |
+| `train.py` | PPO + SGS / uniform sampling, per-term reward logging, held-out evaluation every 50 iterations; `--teacher=1` trains a teacher that also reads the privileged state |
+| `distill.py` | Teacher → blind student: the student reads 1 s of its own sensors and imitates the teacher (DAgger), no reward |
 | `terms.py` | Reward-term report for a run: which term dominates, how it moved |
 | `play.py` | Held-out evaluation and films on the full CPU model |
 | `progress.py` | Training-progress film: one scenario played by snapshots from across a run, with their statistics |
@@ -22,6 +23,7 @@ rates, noise, biases, dropouts and a 4–20 ms control delay. No policy input co
 | `check_robot.py` | Does a build's robot fit rl2? Run it first on a new build version |
 | `showreel.py` | One film of all five skills in one yard, five policies, an orbiting camera that visits each |
 | `teleop.py` | Drive a policy with the keyboard (needs a display) |
+| `wandb_sync.py` | Send runs to Weights & Biases from their logs (`--follow` while they train); training itself needs no account |
 | `sync.sh` | Copy the code to cake (code only; policies, logs and films stay there) |
 | `codex-review.md` | The independent Codex review and what changed because of it |
 | `sgs-lessons.md` | The project record: what we did, what worked and what didn't, deployable policies, lessons from SGS |
@@ -42,6 +44,9 @@ rates, noise, biases, dropouts and a 4–20 ms control delay. No policy input co
 
 Output: 12 joint targets around the standing pose, clamped to the firmware's limits, applied after the control delay.
 
+A distilled student (`distill.py`) reads the last 50 frames (1 s) instead of 3: the robot's sensors are the same,
+it just remembers longer, to work out from how its legs landed what the ground is like.
+
 ## Tasks
 
 | Task | Episode | Success | Bank (difficulty) |
@@ -60,6 +65,8 @@ Training (cake, conda env capstan-gpu):
 sh run_queue.sh experiments/queue4.list                         # a batch, in order; logs/<name>.*
 python train.py --task=terrain --sampler=sgs --seed=0 --steps=400
 python train.py --task=walk --w=slip=-0.5,air=2.0 --name=walk_try   # change reward weights
+python train.py --task=terrain --sampler=uniform --teacher=1 --name=terrain_teacher_s0   # a teacher that sees the course
+python distill.py --teacher=terrain_teacher_s0                # its blind student: terrain_student_s0
 python terms.py walk walk_try                                   # compare reward terms
 python play.py eval terrain_uniform_s0 --n=400                  # full CPU model, held-out
 MUJOCO_GL=egl python play.py film rear --level=5
@@ -78,6 +85,7 @@ Teleop (a machine with a display; copy `policies/<name>.npz` from cake, ~1 MB): 
 | `handstand2_best` | handstand | 82 % |
 | `balance2_best` | balance | 39.5 % (100 % at level 0) |
 | `terrain_uniform_s0_best` | terrain | 75.5 % |
+| `terrain_student_s0_best` | terrain (blind student of a teacher that saw the course; reads 1 s of history) | 77.0 % |
 
 ## A new build version
 

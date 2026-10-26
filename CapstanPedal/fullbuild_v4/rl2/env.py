@@ -23,6 +23,14 @@ def make_task(name, weights=None):
     return T.TASKS[name](weights)
 
 
+def task_for(path):
+    """The task a policy file was trained on, observing as the policy expects (a distilled student reads N_LONG frames)."""
+    z = np.load(path)
+    task = make_task(str(z["task"]))
+    task.obs_hist = int(z["n_hist"]) if "n_hist" in z.files else C.N_HIST
+    return task
+
+
 class GpuEnv:
     def __init__(self, task, n_env, nacon=24, njmax=160):
         from mujoco import mjx
@@ -47,6 +55,37 @@ class GpuEnv:
     def first_obs(self, d, aux, bank, key):
         cfg = {k: v[aux["cfg"]] for k, v in bank.items()}
         return self.task.first_obs(C.state(self.L, d.qpos, d.qvel, d.site_xpos), aux, cfg, key)
+
+    def first_priv(self, d, aux, bank):
+        cfg = {k: v[aux["cfg"]] for k, v in bank.items()}
+        return self.task.priv_now(C.state(self.L, d.qpos, d.qvel, d.site_xpos), aux, cfg)
+
+    def respawn(self, bank, d, aux, mp, obs, priv, done, cfg, key, **aux_set):
+        """Start a new episode in the worlds that are done (all n), on configurations cfg (n bank rows); the others
+        keep going. aux_set: values to put in the new episodes' aux (train.py: cat)."""
+        n = self.n
+        k_r, k_o = jax.random.split(key)
+        q, v, aux_r, mp_r = jax.vmap(self.reset_slot, in_axes=(None, 0, 0))(bank, cfg, jax.random.split(k_r, n))
+        aux_r = dict(aux_r, **aux_set)
+        mp_r, dp_r = split(mp_r)
+        sel = lambda new, old: jp.where(done.reshape((n,) + (1,) * (old.ndim - 1)), new, old)   # noqa: E731
+        d = d.replace(qpos=sel(q, d.qpos), qvel=sel(v, d.qvel), qacc_warmstart=sel(jp.zeros_like(d.qacc_warmstart), d.qacc_warmstart),
+                      ctrl=sel(jp.zeros_like(d.ctrl), d.ctrl), **{k: sel(x, getattr(d, k)) for k, x in dp_r.items()})
+        aux_f, obs_f = jax.vmap(self.first_obs, in_axes=(0, 0, None, 0))(d, aux_r, bank, jax.random.split(k_o, n))
+        priv_f = jax.vmap(self.first_priv, in_axes=(0, 0, None))(d, aux_f, bank)
+        return (d, jax.tree_util.tree_map(sel, aux_f, aux), jax.tree_util.tree_map(sel, mp_r, mp), sel(obs_f, obs),
+                sel(priv_f, priv))
+
+    def start(self, bank, cfg, key, **aux_set):
+        """Every world's first episode: (d, aux, mp, obs, priv)."""
+        d = self.make_data()
+        k1, k2 = jax.random.split(key)
+        q, v, aux, mp = jax.vmap(self.reset_slot, in_axes=(None, 0, 0))(bank, cfg, jax.random.split(k1, self.n))
+        aux = dict(aux, **aux_set)
+        mp, dp = split(mp)
+        d = d.replace(qpos=q, qvel=v, **dp)
+        aux, obs = jax.vmap(self.first_obs, in_axes=(0, 0, None, 0))(d, aux, bank, jax.random.split(k2, self.n))
+        return d, aux, mp, obs, jax.vmap(self.first_priv, in_axes=(0, 0, None))(d, aux, bank)
 
     def step(self, mx, d, aux, action, bank, key):
         L, task, mjx = self.L, self.task, self.mjx
