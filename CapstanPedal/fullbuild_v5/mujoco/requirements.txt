@@ -1,0 +1,8 @@
+# teleop.py, make_videos.py (the simulation)
+mujoco==3.16.0
+glfw==2.10.2
+numpy==2.5.4
+pillow==12.3.0
+# watch_assembly.py and ../urdf/build_urdf.py also import the CAD code (src/make_quad_film.py -> generate_quad.py)
+build123d==0.13.0
+fast-simplification==0.2.0

@@ -1,0 +1,199 @@
+{
+ "geometry": {
+  "x": {
+   "outer": 38.75,
+   "inner": 103.5,
+   "front": 336.5
+  },
+  "y_ax": 86.0,
+  "z_ax": -60.0,
+  "motorC": [
+   86.0,
+   24.0
+  ],
+  "hip_x": 221.5
+ },
+ "reactions_push": {
+  "38.75": -307.49460331410796,
+  "103.50": 681.6803353509684,
+  "336.50": 210.8142679631395
+ },
+ "rows": [
+  {
+   "part": "Centre bulkhead",
+   "case": "push / landing 585 N",
+   "vm": 4.2,
+   "across": 0.7,
+   "sf_petg": 10.63,
+   "sf_6061": 65.2,
+   "disp_petg": 0.21,
+   "disp_6061": 0.006,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "Centre bulkhead",
+   "case": "impact x2 1170 N",
+   "vm": 7.8,
+   "across": 1.3,
+   "sf_petg": 5.78,
+   "sf_6061": 35.4,
+   "disp_petg": 0.21,
+   "disp_6061": 0.006,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Centre bulkhead",
+   "case": "one leg x2 1170 N",
+   "vm": 6.2,
+   "across": 0.9,
+   "sf_petg": 7.26,
+   "sf_6061": 44.5,
+   "disp_petg": 0.23,
+   "disp_6061": 0.007,
+   "hot": [
+    36,
+    89,
+    -117
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "push / landing 585 N",
+   "vm": 2.8,
+   "across": 0.7,
+   "sf_petg": 16.1,
+   "sf_6061": 98.8,
+   "disp_petg": 0.07,
+   "disp_6061": 0.002,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "impact x2 1170 N",
+   "vm": 7.0,
+   "across": 1.6,
+   "sf_petg": 6.47,
+   "sf_6061": 39.7,
+   "disp_petg": 0.17,
+   "disp_6061": 0.005,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Inner bulkhead",
+   "case": "one leg x2 1170 N",
+   "vm": 5.9,
+   "across": 1.2,
+   "sf_petg": 7.56,
+   "sf_6061": 46.4,
+   "disp_petg": 0.17,
+   "disp_6061": 0.005,
+   "hot": [
+    106,
+    78,
+    52
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "End frame",
+   "case": "push / landing 585 N",
+   "vm": 2.1,
+   "across": 0.3,
+   "sf_petg": 21.94,
+   "sf_6061": 134.5,
+   "disp_petg": 0.06,
+   "disp_6061": 0.002,
+   "hot": [
+    333,
+    -105,
+    -58
+   ],
+   "target": 2.0
+  },
+  {
+   "part": "End frame",
+   "case": "impact x2 1170 N",
+   "vm": 4.1,
+   "across": 0.5,
+   "sf_petg": 10.97,
+   "sf_6061": 67.3,
+   "disp_petg": 0.12,
+   "disp_6061": 0.004,
+   "hot": [
+    333,
+    -105,
+    -58
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "End frame",
+   "case": "one leg x2 1170 N",
+   "vm": 3.8,
+   "across": 0.5,
+   "sf_petg": 11.83,
+   "sf_6061": 72.5,
+   "disp_petg": 0.13,
+   "disp_6061": 0.004,
+   "hot": [
+    333,
+    105,
+    -59
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Head mount",
+   "case": "face-first fall 1170 N",
+   "vm": 14.9,
+   "across": 3.5,
+   "sf_petg": 3.02,
+   "sf_6061": null,
+   "disp_petg": 0.16,
+   "disp_6061": null,
+   "hot": [
+    -396,
+    71,
+    42
+   ],
+   "target": 1.0
+  },
+  {
+   "part": "Belly saddle",
+   "case": "belly landing 1170 N",
+   "vm": 7.5,
+   "across": 1.4,
+   "sf_petg": 6.02,
+   "sf_6061": null,
+   "disp_petg": 0.13,
+   "disp_6061": null,
+   "hot": [
+    95,
+    32,
+    -197
+   ],
+   "target": 1.0
+  }
+ ]
+}
