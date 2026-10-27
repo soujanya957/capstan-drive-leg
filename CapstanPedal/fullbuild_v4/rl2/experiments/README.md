@@ -10,3 +10,5 @@ One run per line: `<name> <train.py options>`. Run a batch on cake with `sh run_
 | `queue3.list` | 2026-10-24 | After the Codex review: SGS bookkeeping fix (3+3 seeds), balance with corrected sensors, handstand reward reshaped |
 | `queue4.list` | 2026-10-24 | Noise cap + entropy anneal, level curriculum (`--sampler=curr`), constraints as terminations (`--cat`) |
 | `queue5.list` | 2026-10-26 | Terrain teacher–student: a teacher that sees a height scan of the course, its blind student (`distill.py`), and a blind PPO control with the same critic |
+| `queue6.list` | 2026-10-26 | FastSAC (`train_sac.py`) vs PPO at about equal wall-clock (150 M vs 400 M steps): terrain 1-step vs 3-step returns, 3+3 seeds with PPO controls, handstand, walk |
+| `queue7.list` | 2026-10-26 | FastSAC with the paper's settings (averaged critics, entropy target 0, std cap 1, gamma 0.97, AdamW): terrain, 3 seeds. 88.2 % vs PPO's 70.7 % (sgs-lessons.md, Experiment 6) |

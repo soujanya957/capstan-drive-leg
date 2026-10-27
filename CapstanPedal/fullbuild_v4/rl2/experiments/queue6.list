@@ -1,0 +1,8 @@
+terrain_sac_s0 train_sac.py --task=terrain --seed=0 --steps=150 --n_step=1
+terrain_blind_s1 --task=terrain --sampler=uniform --seed=1 --steps=400
+terrain_blind_s2 --task=terrain --sampler=uniform --seed=2 --steps=400
+terrain_sac3_s0 train_sac.py --task=terrain --seed=0 --steps=150
+terrain_sac3_s1 train_sac.py --task=terrain --seed=1 --steps=150
+terrain_sac3_s2 train_sac.py --task=terrain --seed=2 --steps=150
+handstand_sac_s0 train_sac.py --task=handstand --seed=0 --steps=120
+walk_sac_s0 train_sac.py --task=walk --seed=0 --steps=100

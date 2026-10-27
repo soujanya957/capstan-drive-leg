@@ -25,6 +25,7 @@ class Policy:
         n = sorted({int(k.split("_")[-2]) for k in z.files if k.startswith("mlp_extractor_policy_net") and k.endswith("weight")})
         self.layers = [(z[f"mlp_extractor_policy_net_{i}_weight"], z[f"mlp_extractor_policy_net_{i}_bias"]) for i in n]
         self.out = (z["action_net_weight"], z["action_net_bias"])
+        self.squash = "squash" in z.files and bool(z["squash"])           # FastSAC (train_sac.py): tanh output
         if self.kind == "student":
             self.n_hist, self.n_frame = int(z["n_hist"]), int(z["n_frame"])
             self.f_mean, self.f_var = z["frame_mean"], z["frame_var"]
@@ -47,4 +48,4 @@ class Policy:
         for W, b in self.layers:
             x = elu(W @ x + b)
         W, b = self.out
-        return np.clip(W @ x + b, -1.0, 1.0)
+        return np.tanh(W @ x + b) if self.squash else np.clip(W @ x + b, -1.0, 1.0)

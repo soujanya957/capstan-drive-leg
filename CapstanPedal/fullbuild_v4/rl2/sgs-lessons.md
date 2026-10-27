@@ -3,7 +3,7 @@
 The running record of the learned-control work on Capstan v4: every skill trained so far, what worked and what
 didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet*,
 [arXiv 2610.12465](https://arxiv.org/abs/2610.12465)). Updated as experiments finish. Training runs on cake
-(RTX 4090); results below are from there. Last updated 2026-10-24.
+(RTX 4090); results below are from there. Last updated 2026-10-26.
 
 ## Summary so far
 
@@ -31,6 +31,7 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
 | Balance on a board on a ball | `balance2_best` | 39.5 % | 100 % at level 0 (damped ball), 0 % at level 9; on cake only |
 | Blind terrain course | `terrain_uniform_s0_best` | 75.5 % | stairs, slopes, obstacles; gaps past level 0 never crossed |
 | Blind terrain course, distilled | `terrain_student_s0_best` | 77.0 % | student of a teacher that saw the course; stable, no late slump; reads 1 s of sensor history (~2 MB) |
+| Blind terrain course, FastSAC | `terrain_fsac_s1_best` | **90.5 %** | off-policy (Experiment 6); 3 seeds 83–91 %, no late slump; gaps still weak |
 
 **What worked.**
 - **Checkpoint selection** was the biggest single gain: terrain 50.5 → 73.5 % (mean of 3 seeds), handstand2
@@ -42,6 +43,9 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
 - **Teacher–student** (Experiment 5): no gain in peak success for a blind robot (77.0 % vs 77.0 %), but the student
   does not slump: its last snapshot scores 74.5 % where the blind PPO run's last scores 55.5 %.
 
+- **FastSAC with the paper's settings** (Experiment 6): terrain 70.7 → 88.2 % (mean of 3 seeds, best snapshots),
+  last snapshots 57 → 87 %; better on every terrain type. My first FastSAC settings lost to PPO (45 %).
+
 **What didn't.**
 - **SGS**: 14 runs over three experiments; never beat uniform, and lost by 15–20 points on terrain (details below).
 - **Capping the action noise** (`--std_max`, `--ent_end`): terrain 73.5 → 58.5 %, handstand 82 → 66 %, rear 100 →
@@ -52,8 +56,8 @@ didn't, and what we learned trying SGS (Zhang et al. 2026, *A Balanced Data Diet
   within seed noise; robots settled at level ~1. Balance with the curriculum: 35 % (39.5 % without), still rising.
 
 **Open problems and next steps** (in order of likely payoff):
-1. Why training success falls after ~70 M steps on terrain, handstand and balance (learning rate, the value
-   network, what the reward pays for late in training).
+1. ~~Why training success falls after ~70 M steps~~: it is PPO's; FastSAC does not slump on terrain (Experiment 6).
+   Next: FastSAC for walk, handstand, rear and balance.
 2. Curriculum promotion by distance covered, not success.
 3. ~~Teacher–student training for terrain~~ done (Experiment 5). What it showed: gaps need a sensor that looks
    ahead. A forward-facing multi-zone range sensor (e.g. VL53L5CX, 8×8 zones) and a student that reads a few
@@ -230,3 +234,59 @@ What we learned:
 - Next: a forward-looking range sensor so the student gets part of the scan (gaps); 3 seeds of teacher and student;
   distilling from a teacher trained longer at a low learning rate.
 
+
+## Experiment 6: FastSAC instead of PPO on terrain (rl2/, queue6–7, 2026-10-26)
+
+- **FastSAC** (`train_sac.py`; Seo, Abbeel et al. 2025, [arXiv 2512.01996](https://arxiv.org/abs/2512.01996)):
+  off-policy soft actor-critic made for thousands of GPU worlds. 4,096 worlds, a 1 M-step replay buffer, 4
+  updates of 16,384 samples per world step, two distributional critics (C51, 101 atoms) with layer norm that also
+  read the privileged state, a tanh-squashed actor that reads only the robot's sensors. 150 M steps, ~34 min at
+  74 k steps/s.
+- **Control**: blind PPO, 400 M steps, ~30 min (`terrain_blind_s0..s2`, same critic as Experiment 5). About equal
+  wall-clock on the 4090.
+- Three FastSAC settings, run in order:
+  1. my first version: 1-step returns, the more pessimistic critic as the target, target entropy -6 (-|A|/2),
+     initial alpha 0.01, pre-tanh std up to e, gamma 0.99, Adam (`terrain_sac_s0`);
+  2. the same with 3-step returns (`terrain_sac3_s0..s2`);
+  3. the paper's settings (`terrain_fsac_s0..s2`, now the defaults): 3-step returns, the **average** of the two
+     critics as the target, target entropy 0, initial alpha 0.001, pre-tanh std at most 1, gamma 0.97, AdamW
+     (weight decay 0.001, beta2 0.95).
+
+| | Held-out peak, GPU (4,160) | Best snapshot, CPU (200) | Last snapshot, CPU (200) |
+|---|---|---|---|
+| PPO (3 seeds) | 70.7 / 63 / 66 % | 77.0 / 62.5 / 72.5 % (mean **70.7 %**) | 55.5 / 56.5 / 60.0 % |
+| FastSAC 1-step (1 seed) | 33 % | 39.0 % | – |
+| FastSAC 3-step (3 seeds) | 32 / 52 / 43 % | 34.0 / 55.0 / 46.5 % (mean 45.2 %) | – |
+| **FastSAC, paper settings** (3 seeds) | **90 / 88 / 83 %** | **91.0 / 90.5 / 83.0 %** (mean **88.2 %**) | **88.5 / 90.5 / 83.0 %** |
+
+Stress audit, best snapshots (`audit.py --n=20`; success per terrain type, mean over 3 seeds and three levels /
+at the hardest level): PPO vs FastSAC (paper settings)
+
+| | flat | rough | slope | stairs up | stairs down | gaps | obstacles | mixed | overall |
+|---|---|---|---|---|---|---|---|---|---|
+| PPO | .92/.90 | .86/.85 | .80/.93 | .78/.62 | .64/.35 | .05/.00 | .75/.43 | .59/.38 | **.67** |
+| FastSAC | 1.0/1.0 | 1.0/1.0 | .94/.88 | .96/.88 | .98/.97 | .41/.05 | .98/.97 | .86/.68 | **.89** |
+
+What we learned:
+- **The paper's settings made the difference, not the algorithm alone.** My first FastSAC lost to PPO by 30
+  points; the same code with the paper's settings beats it by 17 (88 % vs 71 %) on all three seeds, and the worst
+  FastSAC seed beats the best PPO seed's last snapshot by 23 points. The old runs' held-out success swung ±15
+  points between evaluations 8 M steps apart; the new ones rise smoothly. Which setting mattered most is not
+  separated yet; the paper's ablations point at the averaged critics (taking the minimum underestimates when the
+  critics use layer norm) and the lower std cap with a small initial alpha (too much early exploration).
+- **No late slump.** Every PPO run on terrain peaked at 100–130 M steps and lost 15–30 points by the end. FastSAC's
+  last snapshot is within 2.5 points of its best on all three seeds. Open problem 1 above is a PPO problem here.
+- **Fast.** Seed 0 passed PPO's best peak (71 %) at 16 M steps, about 4 minutes in.
+- **It is better on every terrain type**, most on stairs down (.98 vs .64), obstacles and mixed courses. Gaps are
+  still the weak spot: .41 averaged over levels, .05 at the hardest, blind (better than the teacher-student
+  student's .12 on GPU, below the teacher's .52 that could see).
+- **A blind FastSAC policy beats the teacher-student pair** of Experiment 5 (student 77.0 %) with no teacher, no
+  history encoder and a plain 3-frame MLP. It also beats the sighted teacher's peak (80.9 % on GPU).
+- Other skills, first-version settings only: walk 80.0 % on CPU (`walk_sac_s0`, 100 M steps), handstand 72.0 %
+  with 12 % falls, held-out swinging 4–73 % between evaluations (`handstand_sac_s0`). Both need a rerun with the
+  paper's settings.
+- Practical: `terrain_fsac_s1_best` (90.5 %, 0 % falls, ~1 MB, numpy) is the new deployable terrain policy.
+  `policy.py` applies the tanh when the file says `squash`.
+- Next: rerun walk, handstand, rear and balance with FastSAC; an ablation of the settings (which one fixed it);
+  the teacher-student idea on top of FastSAC (a sighted FastSAC teacher for gaps); an RL-token style residual
+  (Physical Intelligence 2026) on a frozen FastSAC policy.

@@ -6,6 +6,10 @@ teacher's height scan (what it sees and the others do not) is drawn as dots on t
            ../video/v4_rl2_ts_all.mp4 (all of them), ../video/v4_rl2_ts_teacher_<terrain>_<level>.mp4 (1280 x 720,
            the teacher alone, orbiting camera), logs/ts_film.json (what happened in each panel)
 
+    ... compare_film.py --sides=terrain_fsac_s0_best,terrain_blind_s0_best,terrain_student_s0_best --tag=sac
+        -> ../video/v4_rl2_sac_<terrain>_<level>.mp4 and v4_rl2_sac_all.mp4: deployable policies only, no teacher,
+           logs/sac_film.json
+
 The course of each scene is the first of that type and level in the film bank (seed 4242, as play.py film).
 """
 import json
@@ -116,16 +120,23 @@ def main():
     tname, snap = opts.get("teacher", "terrain_teacher_s0"), int(opts.get("snap", 59))
     task_t = E.make_task("terrain")
     ce_t = E.CpuEnv(task_t)
-    teacher = Teacher(HERE / "policies" / "snaps" / tname / f"{snap:05d}M.pkl", ce_t)
-    envs = dict(teacher=(ce_t, teacher))
-    for side, name in SIDES[1:]:
+    if "sides" in opts:                                                   # deployable policies only
+        sides, ftag, hero, teacher = [(n, n) for n in opts["sides"].split(",")], opts.get("tag", "cmp"), [], None
+        envs = {}
+    else:
+        sides, ftag, hero = SIDES, "ts", HERO
+        teacher = Teacher(HERE / "policies" / "snaps" / tname / f"{snap:05d}M.pkl", ce_t)
+        envs = dict(teacher=(ce_t, teacher))
+    for side, name in sides:
+        if name is None:
+            continue
         path = HERE / "policies" / f"{name}.npz"
         envs[side] = (E.CpuEnv(E.task_for(path)), P.Policy(path))
     scan = scan_fn(task_t)
     bank = task_t.bank(400, 4242)
     kind, level = np.asarray(bank["kind"]), np.asarray(bank["level"])
     vid = C.VIDEO
-    tmp = HERE / "logs" / "ts_tmp"
+    tmp = HERE / "logs" / f"{ftag}_tmp"
     tmp.mkdir(parents=True, exist_ok=True)
     log, clips = {}, []
     for kn, lv in SCENES:
@@ -133,29 +144,29 @@ def main():
         cfg = play.row(bank, i)
         tag = f"{kn}_{lv}"
         log[tag] = {}
-        for side, _ in SIDES:
+        for side, _ in sides:
             ce, pol = envs[side]
             cam = Cam(ce, tmp / f"{tag}_{side}.mp4", 640, 720)
             log[tag][side] = play_one(ce, pol, cfg, cam, scan if side == "teacher" else None)
             cam.close()
-        out = vid / f"{C.TAG}_rl2_ts_{tag}.mp4"
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"] + sum((["-i", str(tmp / f"{tag}_{s}.mp4")] for s, _ in SIDES), [])
-                       + ["-filter_complex", "[0:v][1:v][2:v]hstack=inputs=3", "-c:v", "libx264", "-crf", "21", "-pix_fmt", "yuv420p",
+        out = vid / f"{C.TAG}_rl2_{ftag}_{tag}.mp4"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"] + sum((["-i", str(tmp / f"{tag}_{s}.mp4")] for s, _ in sides), [])
+                       + ["-filter_complex", "".join(f"[{k}:v]" for k in range(len(sides))) + f"hstack=inputs={len(sides)}", "-c:v", "libx264", "-crf", "21", "-pix_fmt", "yuv420p",
                           "-movflags", "+faststart", str(out)], check=True)
         clips.append(out)
         print(tag, log[tag], flush=True)
     lst = tmp / "all.txt"
     lst.write_text("".join(f"file '{c}'\n" for c in clips))
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy",
-                    str(vid / f"{C.TAG}_rl2_ts_all.mp4")], check=True)
-    for kn, lv in HERO:
+                    str(vid / f"{C.TAG}_rl2_{ftag}_all.mp4")], check=True)
+    for kn, lv in hero:
         i = int(np.flatnonzero((kind == T.TERRAINS.index(kn)) & (level == lv))[0])
         cfg = play.row(bank, i)
         cam = Cam(ce_t, vid / f"{C.TAG}_rl2_ts_teacher_{kn}_{lv}.mp4", 1280, 720, orbit=True)
         log[f"hero_{kn}_{lv}"] = play_one(ce_t, teacher, cfg, cam, scan)
         cam.close()
         print(f"hero {kn} {lv}", log[f"hero_{kn}_{lv}"], flush=True)
-    json.dump(log, open(HERE / "logs" / "ts_film.json", "w"), indent=1)
+    json.dump(log, open(HERE / "logs" / f"{ftag}_film.json", "w"), indent=1)
 
 
 if __name__ == "__main__":
