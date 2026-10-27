@@ -1,0 +1,4 @@
+walk_fsac_s0 train_sac.py --task=walk --seed=0 --steps=120
+handstand_fsac_s0 train_sac.py --task=handstand --seed=0 --steps=150
+rear_fsac_s0 train_sac.py --task=rear --seed=0 --steps=120
+balance_fsac_s0 train_sac.py --task=balance --seed=0 --steps=150

@@ -6,7 +6,7 @@ What is different from PPO:
   - Off-policy: every transition goes into a replay buffer on the GPU (1 M by default) and is learned from many
     times; PPO uses each batch for 5 passes and throws it away.
   - The critic learns Q(state, action) (how good this action is here), not V(state); the actor is trained to pick
-    actions the critic rates highly. Two critics, and the target uses the more pessimistic one (clipped double Q).
+    actions the critic rates highly. Two critics; the target averages them (--cdq=1: the more pessimistic one).
   - Distributional critic (C51): each critic predicts a distribution over 101 return values, not one number.
   - "Soft": the actor is also paid for its entropy, alpha * H, with alpha tuned so the entropy stays near a
     target (--ent_target). Actions are a tanh-squashed Gaussian, so they stay in [-1, 1].
