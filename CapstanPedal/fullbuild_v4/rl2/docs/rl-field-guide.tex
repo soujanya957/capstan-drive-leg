@@ -43,6 +43,7 @@
 
 \newcommand{\repo}{https://github.com/soujanya957/capstan-drive-leg/blob/231ca53/CapstanPedal/fullbuild_v4}
 \newcommand{\gh}[2]{\href{\repo/#1\##2}{\texttt{\detokenize{#1}}\,\textsuperscript{\tiny #2}}}
+\newcommand{\ghs}[2]{\href{https://github.com/soujanya957/capstan-drive-leg/blob/e0ecfe6/CapstanPedal/fullbuild_v4/#1\##2}{\texttt{\detokenize{#1}}\,\textsuperscript{\tiny #2}}}
 \newcommand{\ghf}[1]{\href{\repo/#1}{\texttt{\detokenize{#1}}}}
 \newcommand{\cc}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\key}[1]{\textbf{#1}}
@@ -54,7 +55,7 @@
 \begin{center}
 {\sffamily\bfseries\LARGE Capstan RL Field Guide}\\[3pt]
 {\sffamily How the v4 quadruped learns to move, read from the code}\\[2pt]
-{\small\color{Ink2} \texttt{CapstanPedal/fullbuild\_v4/rl2} \;·\; 26 October 2026 \;·\; code links point at commit \href{https://github.com/soujanya957/capstan-drive-leg/tree/231ca53}{\texttt{231ca53}}; the teacher–student code (§\ref{sec:ts}) is newer}
+{\small\color{Ink2} \texttt{CapstanPedal/fullbuild\_v4/rl2} \;·\; 26 October 2026 \;·\; code links point at commit \href{https://github.com/soujanya957/capstan-drive-leg/tree/231ca53}{\texttt{231ca53}}, FastSAC links at \texttt{e0ecfe6}}
 \end{center}
 
 \begin{note}
@@ -64,6 +65,8 @@ run at once on the GPU. Every 20\,ms each robot's \emph{policy} (a neural networ
 of reward terms. A second network, the \emph{critic}, predicts how much reward is coming. After 24 steps of all 8{,}192 robots,
 PPO makes the actions that did \emph{better than the critic expected} more likely and the rest less likely. Repeat 1{,}500
 times (about 15–30 minutes on the RTX 4090) and the noise becomes a walk. Only the policy runs on the robot.
+\textbf{Newer and better on terrain:} FastSAC (§\ref{sec:fsac}) keeps every step in a replay buffer, learns \emph{how good each
+action is} rather than how good each state is, and reuses each sample $\sim$16 times: 88\,\% held-out on terrain against PPO's 71\,\%.
 \end{note}
 
 \tableofcontents
@@ -81,7 +84,7 @@ times (about 15–30 minutes on the RTX 4090) and the noise becomes a walk. Only
 \node[box, right=of m] (c) {\texttt{core.py}\\robot, motors, sensors};
 \node[box, right=of c] (t) {\texttt{tasks.py}\\rewards, success};
 \node[box, right=of t] (e) {\texttt{env.py}\\8{,}192 worlds};
-\node[box, below=7mm of e] (tr) {\texttt{train.py}\\PPO};
+\node[box, below=7mm of e] (tr) {\texttt{train.py}, \texttt{train\_sac.py}\\PPO, FastSAC};
 \node[box, left=of tr] (np) {\texttt{policies/*.npz}\\$\sim$1\,MB weights};
 \node[run, left=of np] (p) {\texttt{policy.py}\\numpy, on the Pi};
 \node[box, left=of p] (chk) {\texttt{play / audit / pick\_best}\\checks on the CPU model};
@@ -104,6 +107,7 @@ core.py & Builds the model twice (light ``physics'' for the GPU, ``full'' with e
 tasks.py & The five tasks (walk, terrain, rear, handstand, balance): what an episode is, the scenario bank, every reward term, success and fall. \\
 env.py & Steps a task: \cc{GpuEnv} runs thousands of worlds on the GPU, \cc{CpuEnv} one world in the full model. \\
 train.py & PPO: actor and critic, rollout, update, logging, held-out evaluation, snapshots. \cc{--teacher=1}: a teacher (§\ref{sec:ts}). \\
+train\_sac.py & FastSAC: off-policy, replay buffer, twin distributional Q critics, entropy-tuned (§\ref{sec:fsac}). Same tasks and outputs. \\
 distill.py & Teacher $\to$ blind student by imitation (DAgger). No reward. \\
 policy.py & The trained actor in numpy. This is what would run on the Raspberry Pi. \\
 play.py, audit.py, pick\_best.py & Held-out success on the full model, stress tests, choosing the best snapshot. \\
@@ -205,7 +209,93 @@ reward term, decides fallen / success / time-out, and senses the next observatio
 \gh{rl2/tasks.py}{L118-L133} for the shared \cc{finish()}).
 
 % =====================================================================================================================
-\section{Did that noisy try get reward? The critic, the advantage, PPO}
+\section{The core ideas, before any algorithm}\label{sec:core}
+
+Every method in this guide (PPO, FastSAC, the teacher–student pair) is built from the same five pieces. Learn these and each
+algorithm becomes a choice of which pieces to estimate and how. The standard textbook is Sutton and Barto~\cite{sutton2018};
+OpenAI's \emph{Spinning Up}~\cite{spinningup} is the shortest good tour.
+
+\textbf{1. The problem (an MDP).} At each step the world is in a state $s_t$, the robot sees an observation $o_t$ (part of $s_t$,
+with noise), its policy picks an action $a_t\sim\pi(\cdot\mid o_t)$, the world moves to $s_{t+1}$ and pays a reward $r_t$.
+Nobody tells the robot the right action; it only ever sees rewards.
+
+\textbf{2. The goal: the return.} Maximise $J(\pi)=\mathbb{E}_\pi\big[G_0\big]$ with $G_t=\sum_{l\ge0}\gamma^l r_{t+l}$. The discount
+$\gamma<1$ keeps the sum finite and sets the horizon: about $1/(1-\gamma)$ steps, so 100 steps (2\,s) at $\gamma=0.99$ and 33
+steps (0.7\,s) at $\gamma=0.97$.
+
+\textbf{3. Two ways to score a situation.}
+\[
+V^\pi(s)=\mathbb{E}_\pi\big[G_t\mid s_t=s\big]\qquad
+Q^\pi(s,a)=\mathbb{E}_\pi\big[G_t\mid s_t=s,\,a_t=a\big]\qquad
+A^\pi(s,a)=Q^\pi(s,a)-V^\pi(s).
+\]
+$V$: how good is it to \emph{be} here. $Q$: how good is it to \emph{do this} here, then carry on with $\pi$. The advantage $A$: how
+much better this action is than the policy's usual. PPO learns $V$; FastSAC learns $Q$.
+
+\textbf{4. The Bellman equation: values are consistent with themselves.} The return is one reward plus the (discounted) return
+from the next state, so
+\[
+Q^\pi(s,a)=\mathbb{E}\big[\,r+\gamma\,Q^\pi(s',a')\,\big],\qquad a'\sim\pi(\cdot\mid s').
+\]
+This turns learning a value into regression on its own predictions: \emph{temporal-difference} (TD) learning. Take a stored
+transition, compute the \emph{target} $y=r+\gamma Q(s',a')$ with the current network, and move $Q(s,a)$ toward $y$.
+For example, with $r=0.12$, $\gamma=0.97$ and $Q(s',a')=4.0$, the target is $0.12+0.97\times4.0=4.00$. If the critic said
+$Q(s,a)=3.6$, the TD error is $+0.4$: this step went better than predicted, so raise $Q(s,a)$.
+The catch is that the target moves when $Q$ moves (chasing your own tail), which is why every Q-learning method keeps a slowly
+updated \emph{target network} for $y$~\cite{mnih2015}.
+
+\textbf{5. The policy gradient: push up what beat expectations.} For a stochastic policy~\cite{williams1992,schulman2016},
+\[
+\nabla_\theta J=\mathbb{E}\big[\nabla_\theta\log\pi_\theta(a_t\mid o_t)\;A(s_t,a_t)\big].
+\]
+Read it as: for every action tried, make it more likely in proportion to how much better than expected it turned out. No model
+of the physics, no derivative of the reward; only the log-probability of the action you took. PPO is this, made safe for big
+steps (§\ref{sec:ppo}).
+
+\textbf{The split that matters: on-policy vs off-policy.}
+
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}p{2.6cm}XX@{}}
+\toprule
+& \textbf{On-policy} (PPO) & \textbf{Off-policy} (DQN, DDPG, TD3, SAC, FastSAC) \\ \midrule
+Learns from & only data from the \emph{current} policy & any past data, kept in a \emph{replay buffer} \\
+Each sample is used & a few times (5 passes here), then thrown away & many times (about 16 times here) \\
+The critic learns & $V(s)$, from real returns (GAE) & $Q(s,a)$, from its own next-step predictions (Bellman) \\
+The policy improves by & the policy gradient with advantages & following $\partial Q/\partial a$: pick actions the critic rates higher \\
+Strength & simple, robust, one main knob & data-efficient; can keep improving from old experience \\
+Weakness & needs fresh data every update & bootstrapping can go unstable: errors feed on themselves \\ \bottomrule
+\end{tabularx}
+\end{small}
+
+\begin{center}
+\begin{tikzpicture}[node distance=2.5mm and 3.5mm, every node/.style={font=\scriptsize\sffamily},
+  pg/.style={draw=Stud!80, fill=Stud!8, rounded corners=2pt, align=center, inner sep=2.5pt},
+  qq/.style={draw=Teach!80, fill=Teach!8, rounded corners=2pt, align=center, inner sep=2.5pt},
+  ar/.style={-{Stealth[length=1.5mm]}, color=Ink2}]
+\node[pg] (re) {REINFORCE\\1992};
+\node[pg, right=of re] (a2c) {actor-critic\\+ GAE 2016};
+\node[pg, right=of a2c] (trpo) {TRPO\\2015};
+\node[pg, right=of trpo, very thick] (ppo) {\textbf{PPO} 2017\\\texttt{train.py}};
+\node[qq, below=6mm of re] (dqn) {DQN 2015\\discrete};
+\node[qq, right=of dqn] (ddpg) {DDPG 2016\\continuous};
+\node[qq, right=of ddpg] (td3) {TD3 2018\\twin critics};
+\node[qq, right=of td3] (sac) {SAC 2018\\max entropy};
+\node[qq, right=of sac] (ftd3) {FastTD3 2025\\GPU scale};
+\node[qq, right=of ftd3, very thick] (fsac) {\textbf{FastSAC} 2025\\\texttt{train\_sac.py}};
+\node[qq, above=4mm of ftd3] (c51) {C51 2017\\distributional};
+\draw[ar] (re)--(a2c); \draw[ar] (a2c)--(trpo); \draw[ar] (trpo)--(ppo);
+\draw[ar] (dqn)--(ddpg); \draw[ar] (ddpg)--(td3); \draw[ar] (td3)--(sac); \draw[ar] (sac)--(ftd3); \draw[ar] (ftd3)--(fsac);
+\draw[ar] (c51)--(ftd3);
+\node[anchor=west, color=Stud, font=\scriptsize\bfseries\sffamily] at ($(re.north west)+(0,2.6mm)$) {on-policy: policy gradient};
+\node[anchor=west, color=Teach, font=\scriptsize\bfseries\sffamily] at ($(dqn.south west)+(0,-2.6mm)$) {off-policy: Q-learning};
+\end{tikzpicture}
+\end{center}
+
+% =====================================================================================================================
+\section{Did that noisy try get reward? The critic, the advantage, PPO}\label{sec:ppo}
+PPO (Schulman et al.~\cite{schulman2017}) is the policy gradient of §\ref{sec:core} with advantages from GAE~\cite{schulman2016}
+and a clip that stands in for TRPO's trust region~\cite{schulman2015}. It is what legged robots have mostly been trained with
+since Rudin et al.~\cite{rudin2021} ran thousands of them on one GPU.
 
 Reward arrives \emph{every step}; there is no separate check at the end. \cc{finish()} multiplies each raw term by its weight
 and adds them up, then scales by 0.1:
@@ -307,10 +397,10 @@ terrain the course itself. 1{,}040 scenarios for training; 4{,}160 different one
 \subsection{Choosing the next scenario}
 \begin{itemize}
 \item \key{Uniform}: any scenario, equally likely. What every deployable policy used.
-\item \key{SGS} (success-guided sampling, Zhang et al.\ 2026): each scenario keeps its last 100 outcomes; with $p_i$ their mean,
+\item \key{SGS} (success-guided sampling, Zhang et al.~\cite{zhang2026}): each scenario keeps its last 100 outcomes; with $p_i$ their mean,
 \[ w_i=\max\big((p_i+\varepsilon)^{kt}(1-p_i+\varepsilon)^{k(1-t)},\ \varepsilon\big),\quad P(i)\propto \exp\big(\log(w_i+\varepsilon)/T\big),\quad t=0.66,\ k=5,\ T=2, \]
 which peaks at scenarios succeeded about two times in three: hard but possible.
-\item \key{Level curriculum} (Rudin et al.\ 2021): each robot keeps a level per terrain type, up one on success, down one on failure.
+\item \key{Level curriculum} (Rudin et al.~\cite{rudin2021}): each robot keeps a level per terrain type, up one on success, down one on failure.
 \end{itemize}
 \textbf{What we found}: over 14 runs SGS never beat uniform and lost 15–20 points on terrain (a scenario that fails early is
 sampled less, so it is never learned: the bank \emph{freezes}). The curriculum gave $+3$ points, within seed noise; robots settled
@@ -513,15 +603,15 @@ Three ways to get gaits from RL, from most control to least:
 \item \key{Fix one gait} with a clock and a gait reward, as here. For a crawl: offsets $(0, 0.25, 0.5, 0.75)$ and duty 0.75 so three
 feet are always down (today the 0.5 duty is written into the \texttt{want} line, so it would become a parameter).
 \item \key{Make the gait a command}: put offsets and duty in the observation, draw a different gait per episode; one policy learns
-them all and the operator picks at run time (``Walk These Ways'', Margolis and Agrawal 2022).
-\item \key{Let it emerge}: drop the gait terms, keep an energy penalty. Fu et al.\ (2021) found energy alone gives a walk at low
+them all and the operator picks at run time (``Walk These Ways''~\cite{margolis2022}).
+\item \key{Let it emerge}: drop the gait terms, keep an energy penalty. Fu et al.~\cite{fu2021} found energy alone gives a walk at low
 speed, a trot at medium and a gallop-like gait at high, as animals do. Less control over what you get.
 \end{enumerate}
 
 % =====================================================================================================================
 \section{Privileged learning: a teacher that sees, a student that feels}\label{sec:ts}
 
-\textbf{The idea} (Lee et al.\ 2020, ``Learning quadrupedal locomotion over challenging terrain''; Kumar et al.\ 2021, RMA).
+\textbf{The idea} (Lee et al.~\cite{lee2020}; Kumar et al., RMA~\cite{kumar2021}).
 Learning to walk blind over terrain is hard partly because the policy has to work out the ground from its legs \emph{and} learn to
 act on it, at once, from a noisy reward. Split the two:
 
@@ -561,7 +651,7 @@ teacher's and reads $[$last 3 frames$, \hat z]$. Trained by imitation, with no r
 \qquad \pi_\beta=\begin{cases}\mu_T & \text{with prob. }\beta\\ \pi_S & \text{otherwise}\end{cases},
 \]
 where $h$ is the 1\,s history, $p$ the privileged state, and $\beta$ falls from 1 to 0 over the first 20\,\% of training.
-This is \textbf{DAgger} (Ross et al.\ 2011): the states come from the \emph{student's own} driving, so it learns what to do after
+This is \textbf{DAgger}~\cite{ross2011}: the states come from the \emph{student's own} driving, so it learns what to do after
 its own mistakes, which plain copying of teacher trajectories never shows it.
 
 \textbf{What happened} (Experiment 5, \texttt{experiments/queue5.list}, 26 Oct 2026; all held-out):
@@ -586,6 +676,156 @@ stop at the edge.
 stayed in 63–78\,\% throughout. Supervised learning has a fixed target, which points the late-slump problem at the RL loop itself.
 \item \key{Next}: give the robot part of the scan. A forward-facing 8$\times$8-zone range sensor (VL53L5CX) would let a student see gaps coming.
 \end{itemize}
+
+% =====================================================================================================================
+\section{FastSAC: off-policy RL on thousands of robots}\label{sec:fsac}
+
+\textbf{Why try it.} Every PPO run on terrain peaked around 100–130\,M steps and then lost 15–30 points (§\ref{sec:ts}). The
+teacher–student experiment showed a supervised learner with a fixed target does not slump, which pointed at the RL loop.
+FastTD3 and FastSAC (Seo, Abbeel et al.~\cite{seo2025fasttd3,seo2025fastsac}, Berkeley) showed that off-policy RL, long
+thought too slow and fragile for massively parallel simulation, can beat PPO on humanoids when it is scaled the same way: thousands
+of worlds, huge batches, a GPU replay buffer. They trained sim-to-real humanoid walking in 15 minutes on one RTX 4090. It had not
+been tried on a quadruped like this one.
+
+\textbf{Same worlds, different learner.} \texttt{train\_sac.py} uses the same tasks, rewards, scenario banks, held-out tests
+and output files as \texttt{train.py}; only the learning rule changes. The exported actor runs in the same \texttt{policy.py}.
+
+\subsection{Idea 1: learn Q and keep a replay buffer}
+Every step of every world is stored as $(o,p,a,r,o',p',\text{end})$ ($p$: privileged state) in a ring buffer on the GPU:
+1{,}048{,}576 transitions, i.e.\ the last 256 steps (5\,s) of each of 4{,}096 worlds. Each world step adds 4{,}096 transitions
+and the learner then makes 4 updates of 16{,}384 random samples: 65{,}536 samples, so every transition is learned from about
+16 times before it falls out. (PPO: 5 times.) The critic learns $Q(s,a)$ by the Bellman target (§\ref{sec:core}), so it can learn
+from actions an older policy took: the target asks what the \emph{current} policy would do next, $a'\sim\pi(o')$.
+
+\subsection{Idea 2: the actor follows the critic's slope}
+PPO only needs $\log\pi$ of the action taken. Here the critic is a differentiable function of the action, so the actor is
+improved by gradient ascent \emph{through} it (DDPG~\cite{lillicrap2016}). With the \emph{reparameterisation} trick the
+sampled action is a function of the network and fixed noise $\epsilon$:
+\[
+u=\mu_\theta(o)+\sigma_\theta(o)\,\epsilon,\quad \epsilon\sim\mathcal{N}(0,I),\qquad a=\tanh(u)\in[-1,1]^{12},
+\]
+so $\partial Q(s,a)/\partial\theta$ flows from the critic, through $a$, into $\mu$ and $\sigma$. Unlike PPO's actor, this one
+outputs its own noise level per state (24 outputs: 12 means, 12 log-stds).
+
+\subsection{Idea 3: maximum entropy (the ``soft'' in SAC)}
+SAC~\cite{haarnoja2018sac} pays the policy for being random as well as for reward, with a temperature $\alpha$:
+\[
+J(\pi)=\mathbb{E}\Big[\sum_t\gamma^t\big(r_t+\alpha\,\mathcal{H}[\pi(\cdot\mid o_t)]\big)\Big],\qquad
+\mathcal{H}=-\mathbb{E}_{a\sim\pi}[\log\pi(a\mid o)].
+\]
+That changes both losses (\ghs{rl2/train_sac.py}{L174-L206}):
+\[
+y=r+\gamma\Big(\tfrac12\textstyle\sum_{i=1,2}\bar Q_i(s',a')-\alpha\log\pi(a'\mid o')\Big),\qquad
+L_\pi=\mathbb{E}\big[\alpha\log\pi(a\mid o)-\tfrac12\textstyle\sum_i Q_i(s,a)\big],
+\]
+where $\bar Q$ is the target network. The actor wants high $Q$ \emph{and} high entropy; $\alpha$ sets the exchange rate.
+Instead of guessing $\alpha$, it is tuned automatically~\cite{haarnoja2018apps} so the entropy sits at a target $\bar{\mathcal H}$:
+$L(\alpha)=-\alpha\,(\bar{\mathcal H}-\mathcal H)$. Entropy below target $\Rightarrow$ $\alpha$ rises $\Rightarrow$ more exploration.
+\begin{lstlisting}
+g = jax.grad(lambda la_: -la_ * (o["ent_target"] - ent))(params["log_alpha"])   # entropy < target -> alpha up
+\end{lstlisting}
+\textbf{The tanh correction.} Squashing changes the density: $\log\pi(a)=\log\mathcal N(u;\mu,\sigma)-\sum_j\log(1-\tanh^2u_j)$.
+The code uses the stable form $\log(1-\tanh^2u)=2(\log2-u-\mathrm{softplus}(-2u))$ (\ghs{rl2/train_sac.py}{L90-L97}).
+Forget it and the entropy, and so $\alpha$, are wrong.
+
+\subsection{Idea 4: two critics, and how to combine them}
+Q-learning \emph{overestimates}: the actor seeks actions where the critic is wrongly high, and the error is copied into every target
+built from it~\cite{vanhasselt2010}. TD3~\cite{fujimoto2018} trains two critics and builds targets from the \emph{lower} one
+(``clipped double Q''). FastSAC found that with layer norm in the critics (which already curbs blow-ups) the minimum is too
+pessimistic and hurts: it under-rates every unfamiliar action, so the actor stops trying them. It uses the \emph{average}
+instead~\cite{seo2025fastsac}; related work on scaling regularised critics argues the same way~\cite{nauman2024}. The code keeps both (\cc{--cdq}).
+
+\subsection{Idea 5: a distribution, not a number (C51)}
+Each critic outputs probabilities over 101 fixed return values (\emph{atoms}) from $-10$ to $50$, spacing
+$\Delta z=0.6$~\cite{bellemare2017}. $Q$ is their mean. The Bellman target moves each atom to $r+\gamma z$ and splits it between the two
+nearest atoms (\ghs{rl2/train_sac.py}{L142-L150}); the critic is trained by cross-entropy against that.
+Example: atom $z=4.4$, $r=0.3$, $\gamma=0.97$: $0.3+0.97\times4.4=4.568$, which is 0.28 of the way from atom 4.4 to atom 5.0,
+so 72\,\% of its probability goes to 4.4 and 28\,\% to 5.0 ($0.72\times4.4+0.28\times5.0=4.568$, the mean is preserved). The
+entropy term shifts every atom by $-\alpha\log\pi$ first. Why bother: learning the spread of outcomes (a fall or not) gives the
+critic richer gradients than one averaged number, and cross-entropy is better behaved than squared error on a moving target.
+
+\subsection{Idea 6: n-step returns}
+A 1-step target trusts the critic after a single real reward, so news of a fall travels back one step per update. Adding $n$ real
+rewards first (\ghs{rl2/train_sac.py}{L152-L172}):
+\[
+y=r_t+\gamma r_{t+1}+\gamma^2 r_{t+2}+\gamma^3\,\bar Q(s_{t+3},a'),
+\]
+stopping early if the episode ends (and not bootstrapping at all after a real ending; a time-out still bootstraps). Strictly this
+is biased off-policy (the 3 rewards came from an older policy), but with a 5\,s buffer the policy that took them is recent.
+Rainbow~\cite{hessel2018} combined it with the distributional critic; FastTD3 uses 3, and so do we.
+
+\subsection{Idea 7: scale, and the settings that made it work}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\textbf{Setting} & \textbf{Value, and why} \\ \midrule
+Worlds, batch, updates & 4{,}096 worlds; 4 updates of 16{,}384 per world step; replay buffer 1\,M (all on the GPU, one jitted call per 25 steps) \\
+Critics & 2 $\times$ ($203+12\to768\to384\to192\to101$) with layer norm~\cite{ba2016}; asymmetric: read the privileged state~\cite{pinto2018} \\
+Actor & $153\to512\to256\to128\to24$, sensors only; deterministic $\tanh\mu$ on the robot \\
+Target network & Polyak average $\bar\phi\leftarrow0.9\,\bar\phi+0.1\,\phi$ every update \\
+\textbf{Target} & \textbf{average of the two critics} (not the minimum) \\
+\textbf{Entropy} & \textbf{target 0, initial $\alpha=0.001$, pre-tanh std $\le1$}: too much noise early wrecked the first runs \\
+\textbf{Discount} & \textbf{$\gamma=0.97$} (horizon $\approx$0.7\,s) \\
+\textbf{Optimiser} & \textbf{AdamW, lr $3\times10^{-4}$, weight decay 0.001, $\beta_2=0.95$}~\cite{loshchilov2019}; gradient-norm clip 1 \\ \bottomrule
+\end{tabularx}
+\end{small}
+
+\begin{note}
+\textbf{The FastSAC loop}, one call of \cc{chunk()} (\ghs{rl2/train_sac.py}{L214-L245}), repeated 25 times inside the GPU:
+\begin{enumerate}[leftmargin=1.4em]
+\item every world samples $a=\tanh(\mu+\sigma\epsilon)$ from the actor and steps the physics (as PPO);
+\item the 4{,}096 transitions go into the buffer, the input normaliser is updated, finished worlds respawn;
+\item 4 times: draw 16{,}384 3-step samples; build the C51 target from the averaged target critics; one critic step, one actor
+step through the new critics, one $\alpha$ step, Polyak-update the target critics.
+\end{enumerate}
+No rollout-then-update rhythm: acting and learning interleave every step. Learning starts after 0.5\,M transitions.
+\end{note}
+
+\subsection{What happened (Experiment 6, queue6–7, 26 Oct 2026)}
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}Xrrr@{}}
+\toprule
+Terrain, 3 seeds each, held-out & Peak, GPU (4{,}160) & Best snap., CPU (200) & Last snap., CPU (200) \\ \midrule
+PPO, 400\,M steps, $\sim$30 min & 63–71\,\% & 62.5–77.0\,\% (mean 70.7) & 55.5–60.0\,\% \\
+FastSAC, my first settings (3-step) & 32–52\,\% & 34.0–55.0\,\% (mean 45.2) & -- \\
+\textbf{FastSAC, paper settings}, 150\,M, $\sim$34 min & \textbf{83–90\,\%} & \textbf{83.0–91.0\,\% (mean 88.2)} & \textbf{83.0–90.5\,\%} \\ \bottomrule
+\end{tabularx}
+\end{small}
+
+Stress audit of the best snapshots (success per terrain type, 3 seeds, three levels): PPO / FastSAC: flat .92/1.0, rough .86/1.0,
+slope .80/.94, stairs up .78/.96, stairs down .64/.98, gaps .05/.41, obstacles .75/.98, mixed .59/.86; overall \textbf{.67 / .89}.
+
+\begin{itemize}
+\item \key{The settings were the difference.} The same code lost to PPO by 25 points with textbook SAC settings (min of two critics,
+entropy target $-|A|/2$, $\alpha_0=0.01$, std up to $e$) and won by 17 with the paper's. The early runs swung $\pm$15 points between
+evaluations; the new ones climb smoothly. Which single setting mattered most is not yet separated; that ablation is a next step.
+\item \key{No late slump}: last snapshot within 2.5 points of the best on all seeds. The slump was PPO's, not the task's.
+\item \key{Fast}: seed 0 passed PPO's best peak after 16\,M steps, about 4 minutes.
+\item \key{Blind, it beats the teacher–student pair} (77.0\,\%) and the sighted teacher's peak (80.9\,\%), with a plain 3-frame MLP.
+Gaps remain hard (.05 at the hardest level): no amount of learning sees a gap without a sensor.
+\item \key{Cost}: 74\,k steps/s against PPO's 228\,k: the GPU spends most of its time learning, not simulating. Per minute of
+wall-clock it still wins, because it learns far more from each step.
+\end{itemize}
+
+\begin{small}
+\begin{tabularx}{\linewidth}{@{}p{3.1cm}XX@{}}
+\toprule
+& \textbf{PPO} (\texttt{train.py}) & \textbf{FastSAC} (\texttt{train\_sac.py}) \\ \midrule
+Critic learns & $V(s)$ from real returns (GAE) & two $Q(s,a)$ distributions from 3-step Bellman targets \\
+Actor improves by & raising $\log\pi$ of better-than-expected actions, clipped & gradient of $Q$ through the action, plus $\alpha\cdot$entropy \\
+Exploration & one learned std per joint; entropy bonus $c_e$ & per-state std; $\alpha$ tuned to hold an entropy target \\
+Data & 196{,}608 fresh samples per update, used 5 times & 1\,M-sample buffer, each sample used $\sim$16 times \\
+Step size control & clip $\pm20\%$, adaptive lr from KL & fixed lr, slow target network, layer norm \\
+Here, on terrain & 70.7\,\%, slumps late & 88.2\,\%, stable \\ \bottomrule
+\end{tabularx}
+\end{small}
+
+\textbf{Where this goes next.} (1) FastSAC for the other skills (walk, handstand, rear, balance), running now; (2) the ablation:
+one paper setting at a time; (3) a sighted FastSAC teacher distilled into a student with a forward range sensor, for gaps;
+(4) \emph{RL Token}~\cite{xu2026}: freeze a good policy, read its last hidden layer as a compact ``token'' of the situation, and train a
+small residual actor-critic on top that only nudges its actions, with a penalty for straying. That is how large pretrained
+manipulation policies are being fine-tuned with RL on real robots; here it could fine-tune on the real quadruped without
+retraining the whole network.
 
 % =====================================================================================================================
 \section{Is it good? How a policy is judged}
@@ -636,12 +876,90 @@ Scenario bank & Fixed list of episode settings; training draws from one, testing
 Privileged information & What the simulator knows and the robot cannot sense (terrain ahead, friction). \\
 Teacher–student, DAgger & Train with privileged info, then imitate it from real sensors, on the student's own states. \\
 Held-out evaluation & Testing on scenarios never trained on, without noise. The only fair score. \\
-Sim-to-real gap & Everything the simulation gets wrong about the robot; \texttt{hw.py} exists to shrink it. \\ \bottomrule
+Sim-to-real gap & Everything the simulation gets wrong about the robot; \texttt{hw.py} exists to shrink it. \\
+$Q$-function & Expected return after taking action $a$ in state $s$. FastSAC's critics learn it. \\
+Bellman target, TD & $r+\gamma Q(s',a')$: train a value toward one real reward plus its own next prediction. \\
+Target network & A slowly averaged copy of the critic used for targets, so they do not chase themselves. \\
+On-/off-policy & Learns only from the current policy's fresh data (PPO) / from any stored data (FastSAC). \\
+Replay buffer & Store of past transitions that off-policy methods sample from, again and again. \\
+Temperature $\alpha$ & SAC's price of entropy; tuned automatically to hold an entropy target. \\
+Reparameterisation & Writing a sampled action as $\tanh(\mu+\sigma\epsilon)$ so gradients pass through it. \\
+Distributional (C51) & A critic that predicts probabilities over 101 return values, not a single mean. \\
+$n$-step return & $n$ real rewards before trusting the critic; spreads news of a fall back faster. \\ \bottomrule
 \end{tabularx}
 \end{small}
 
 \vspace{4pt}
 {\small\color{Ink2} Results, films and the whole run history: \texttt{rl2/sgs-lessons.md}; the results pages on claude.ai; the
 \texttt{capstan-rl2} project on Weights \& Biases.}
+
+% =====================================================================================================================
+\section{Check yourself}
+
+Cover the answers. If one is hard, the section in brackets has it.
+
+\begin{small}
+\begin{enumerate}[leftmargin=1.5em]
+\item \emph{Why can a robot that stands still collect plenty of reward and still learn nothing from it?}
+\textcolor{Ink2}{Learning uses the advantage, reward relative to what the critic expected; standing gets exactly what it expects, so $A\approx0$. (§\ref{sec:ppo})}
+\item \emph{What is the difference between $V(s)$ and $Q(s,a)$, and which one does each of our trainers learn?}
+\textcolor{Ink2}{$V$ scores the situation, $Q$ the situation plus a chosen action. PPO learns $V$, FastSAC learns $Q$. (§\ref{sec:core})}
+\item \emph{Write the 1-step Bellman target for $Q$. Why is a separate target network needed?}
+\textcolor{Ink2}{$y=r+\gamma Q(s',a')$; without a slowly moving copy, the target shifts with every update and errors amplify. (§\ref{sec:core})}
+\item \emph{PPO throws its data away after 5 passes. Why can't it keep it like FastSAC?}
+\textcolor{Ink2}{Its gradient and GAE assume the data came from the current policy; old data from a different policy gives a wrong gradient.
+FastSAC's Bellman target asks the current policy for $a'$, so old transitions stay valid. (§\ref{sec:core}, §\ref{sec:fsac})}
+\item \emph{How does PPO's actor get better, and how does FastSAC's?}
+\textcolor{Ink2}{PPO: raise the log-probability of actions with positive advantage (clipped). FastSAC: move the action up the critic's slope
+$\partial Q/\partial a$, via the reparameterised sample, plus an entropy bonus.}
+\item \emph{The logged entropy is below its target. What happens to $\alpha$, and then to the policy?}
+\textcolor{Ink2}{$\alpha$ rises, the entropy term weighs more in the actor loss, the policy widens its noise until the entropy is back at target.}
+\item \emph{Why use the average of two critics here rather than the minimum (TD3)?}
+\textcolor{Ink2}{With layer-normed critics overestimation is already small, so the minimum under-rates unfamiliar actions and the actor stops
+exploring. Measured here: min 45\,\%, average (with the other paper settings) 88\,\%.}
+\item \emph{The atom at $z=10.4$ gets $r=0.2$, $\gamma=0.97$. Where does its probability go (atoms every 0.6 from $-10$)?}
+\textcolor{Ink2}{$0.2+0.97\times10.4=10.288$, which is $0.488/0.6=0.81$ of the way from atom 9.8 to atom 10.4: 19\,\% to 9.8, 81\,\% to 10.4. (§\ref{sec:fsac})}
+\item \emph{Why does a time-out bootstrap but a fall does not?}
+\textcolor{Ink2}{A fall really ends the future (value 0). A time-out is an artificial cut; the robot would have kept collecting reward. (§\ref{sec:ppo})}
+\item \emph{Why can't the teacher run on the robot, and why is DAgger better than copying the teacher's trajectories?}
+\textcolor{Ink2}{It reads a height scan and physics the robot cannot sense. DAgger trains on states the student itself visits, including after
+its own mistakes. (§\ref{sec:ts})}
+\item \emph{A run's held-out success went 71\,\% $\to$ 55\,\%. Which file do you deploy?}
+\textcolor{Ink2}{\texttt{<name>\_best.npz} from \texttt{pick\_best.py}, chosen on a separate selection bank, then tested on the held-out bank.}
+\end{enumerate}
+\end{small}
+
+% =====================================================================================================================
+\begin{thebibliography}{99}\small
+\setlength{\itemsep}{1pt}
+\bibitem{sutton2018} R.~S.~Sutton, A.~G.~Barto. \emph{Reinforcement Learning: An Introduction}, 2nd ed. MIT Press, 2018. \url{http://incompleteideas.net/book/the-book-2nd.html}
+\bibitem{spinningup} J.~Achiam. \emph{Spinning Up in Deep RL}. OpenAI, 2018. \url{https://spinningup.openai.com}
+\bibitem{williams1992} R.~J.~Williams. Simple statistical gradient-following algorithms for connectionist reinforcement learning (REINFORCE). \emph{Machine Learning}, 1992.
+\bibitem{schulman2015} J.~Schulman et al. Trust Region Policy Optimization. ICML 2015. \href{https://arxiv.org/abs/1502.05477}{arXiv:1502.05477}
+\bibitem{schulman2016} J.~Schulman et al. High-Dimensional Continuous Control Using Generalized Advantage Estimation. ICLR 2016. \href{https://arxiv.org/abs/1506.02438}{arXiv:1506.02438}
+\bibitem{schulman2017} J.~Schulman et al. Proximal Policy Optimization Algorithms. 2017. \href{https://arxiv.org/abs/1707.06347}{arXiv:1707.06347}
+\bibitem{mnih2015} V.~Mnih et al. Human-level control through deep reinforcement learning (DQN). \emph{Nature}, 2015.
+\bibitem{vanhasselt2010} H.~van Hasselt. Double Q-learning. NeurIPS 2010.
+\bibitem{lillicrap2016} T.~Lillicrap et al. Continuous control with deep reinforcement learning (DDPG). ICLR 2016. \href{https://arxiv.org/abs/1509.02971}{arXiv:1509.02971}
+\bibitem{bellemare2017} M.~G.~Bellemare, W.~Dabney, R.~Munos. A Distributional Perspective on Reinforcement Learning (C51). ICML 2017. \href{https://arxiv.org/abs/1707.06887}{arXiv:1707.06887}
+\bibitem{hessel2018} M.~Hessel et al. Rainbow: Combining Improvements in Deep Reinforcement Learning (n-step + distributional). AAAI 2018. \href{https://arxiv.org/abs/1710.02298}{arXiv:1710.02298}
+\bibitem{fujimoto2018} S.~Fujimoto, H.~van Hoof, D.~Meger. Addressing Function Approximation Error in Actor-Critic Methods (TD3). ICML 2018. \href{https://arxiv.org/abs/1802.09477}{arXiv:1802.09477}
+\bibitem{haarnoja2018sac} T.~Haarnoja, A.~Zhou, P.~Abbeel, S.~Levine. Soft Actor-Critic: Off-Policy Maximum Entropy Deep RL with a Stochastic Actor. ICML 2018. \href{https://arxiv.org/abs/1801.01290}{arXiv:1801.01290}
+\bibitem{haarnoja2018apps} T.~Haarnoja et al. Soft Actor-Critic Algorithms and Applications (automatic temperature). 2018. \href{https://arxiv.org/abs/1812.05905}{arXiv:1812.05905}
+\bibitem{pinto2018} L.~Pinto et al. Asymmetric Actor Critic for Image-Based Robot Learning. RSS 2018. \href{https://arxiv.org/abs/1710.06542}{arXiv:1710.06542}
+\bibitem{ba2016} J.~L.~Ba, J.~R.~Kiros, G.~E.~Hinton. Layer Normalization. 2016. \href{https://arxiv.org/abs/1607.06450}{arXiv:1607.06450}
+\bibitem{loshchilov2019} I.~Loshchilov, F.~Hutter. Decoupled Weight Decay Regularization (AdamW). ICLR 2019. \href{https://arxiv.org/abs/1711.05101}{arXiv:1711.05101}
+\bibitem{nauman2024} M.~Nauman et al. Bigger, Regularized, Optimistic: scaling for compute and sample-efficient continuous control. NeurIPS 2024. \href{https://arxiv.org/abs/2405.16158}{arXiv:2405.16158}
+\bibitem{seo2025fasttd3} Y.~Seo, C.~Sferrazza, H.~Geng, M.~Nauman, Z.-H.~Yin, P.~Abbeel. FastTD3: Simple, Fast, and Capable Reinforcement Learning for Humanoid Control. 2025. \href{https://arxiv.org/abs/2505.22642}{arXiv:2505.22642}
+\bibitem{seo2025fastsac} Y.~Seo, C.~Sferrazza, J.~Chen, G.~Shi, R.~Duan, P.~Abbeel. Learning Sim-to-Real Humanoid Locomotion in 15 Minutes (FastSAC). 2025. \href{https://arxiv.org/abs/2512.01996}{arXiv:2512.01996}
+\bibitem{rudin2021} N.~Rudin, D.~Hoeller, P.~Reist, M.~Hutter. Learning to Walk in Minutes Using Massively Parallel Deep RL. CoRL 2021. \href{https://arxiv.org/abs/2109.11978}{arXiv:2109.11978}
+\bibitem{lee2020} J.~Lee et al. Learning quadrupedal locomotion over challenging terrain. \emph{Science Robotics}, 2020. \href{https://arxiv.org/abs/2010.11251}{arXiv:2010.11251}
+\bibitem{kumar2021} A.~Kumar, Z.~Fu, D.~Pathak, J.~Malik. RMA: Rapid Motor Adaptation for Legged Robots. RSS 2021. \href{https://arxiv.org/abs/2107.04034}{arXiv:2107.04034}
+\bibitem{ross2011} S.~Ross, G.~Gordon, D.~Bagnell. A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning (DAgger). AISTATS 2011.
+\bibitem{margolis2022} G.~Margolis, P.~Agrawal. Walk These Ways: Tuning Robot Control for Generalization with Multiplicity of Behavior. CoRL 2022. \href{https://arxiv.org/abs/2212.03238}{arXiv:2212.03238}
+\bibitem{fu2021} Z.~Fu, A.~Kumar, J.~Malik, D.~Pathak. Minimizing Energy Consumption Leads to the Emergence of Gaits in Legged Robots. CoRL 2021. \href{https://arxiv.org/abs/2111.01674}{arXiv:2111.01674}
+\bibitem{zhang2026} Zhang et al. A Balanced Data Diet (SGS). 2026. \href{https://arxiv.org/abs/2610.12465}{arXiv:2610.12465}
+\bibitem{xu2026} C.~Xu et al. RL Token: Bootstrapping Online RL with Vision-Language-Action Models. 2026. \href{https://arxiv.org/abs/2604.23073}{arXiv:2604.23073}
+\end{thebibliography}
 
 \end{document}
