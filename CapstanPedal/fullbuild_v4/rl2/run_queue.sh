@@ -17,6 +17,7 @@ while :; do
     case "$args" in *.py\ *) script=${args%% *}; args=${args#* } ;; esac
     echo "=== $name $script $args $(date)"; $PY $script --name=$name $args > logs/$name.out 2>&1; tail -2 logs/$name.out
     case "$args" in *--teacher=1*) i=$((i+1)); continue ;; esac     # a teacher cannot run on the robot: no films
+    case "$args" in *--shift=*) i=$((i+1)); continue ;; esac       # changed physics: the CPU checks use the normal bank
     ( export MUJOCO_GL=egl JAX_PLATFORMS=cpu; $PY progress.py $name; $PY play.py film $name; $PY play.py eval $name --n=200
       $PY audit.py $name --n=10 > logs/$name.audit 2>&1
       sh pick.sh $name ) > logs/$name.post 2>&1 &

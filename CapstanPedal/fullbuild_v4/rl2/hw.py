@@ -51,6 +51,15 @@ TOF_NOISE = 0.005                    # m rms, plus 1 % of range
 TOF_REL = 0.01
 TOF_RANGE = (0.04, 1.3)              # short-distance mode
 
+# forward-looking multi-zone range sensor (optional: tasks.Terrain.look, train_sac.py --look=1). VL53L5CX, 8x8 zones,
+# 45 deg field of view, on the front of the body pitched down at the ground ahead. Modelled as the ground height at
+# 7 x 3 points 0.15-1.05 m ahead (the zones' footprints, grouped), not as rays: no occlusion behind a step.
+LOOK_HZ = 15                         # 8x8 mode tops out at 15 Hz; readings are held between updates
+LOOK_NOISE = 0.015                   # m rms, plus LOOK_REL of the distance, assumed
+LOOK_REL = 0.03
+LOOK_PITCH = math.radians(1.5)       # mounting + attitude error per episode (+-): a height error growing with distance
+LOOK_DROP = 0.05                     # chance a zone has no valid reading in an update (holds its last value)
+
 # --- power ----------------------------------------------------------------------------------------------------
 BATTERY_SAG = (0.83, 1.0)            # 6S: 25.2 V full, ~21 V loaded and low; the motors' top speed scales with it
 
@@ -58,4 +67,5 @@ BATTERY_SAG = (0.83, 1.0)            # 6S: 25.2 V full, ~21 V loaded and low; th
 NEW_PARTS = [
     ("PMW3901 optical-flow breakout (e.g. Pimoroni PIM453)", "SPI to the Pi 5; under the bottom plate, lens down"),
     ("VL53L1X time-of-flight breakout (e.g. Pimoroni PIM373)", "I2C to the Pi 5; beside the flow sensor"),
+    ("VL53L5CX 8x8 multi-zone ToF breakout (e.g. Pimoroni PIM520), optional", "I2C to the Pi 5; front of the body, pitched down to see 0.15-1 m ahead (terrain look-ahead)"),
 ]

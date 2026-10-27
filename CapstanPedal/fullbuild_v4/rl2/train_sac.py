@@ -18,6 +18,18 @@ What is different from PPO:
     defaults: --cdq=1 --ent_target=-6 --alpha0=0.01 --log_std_max=1 --gamma=0.99 --wd=0 --b2=0.999.
   - n-step returns (--n_step=3): the target adds up 3 real rewards before trusting the critic, so reward reaches
     earlier steps faster. With 1-step targets the first terrain run (terrain_sac_s0) peaked at 33 % vs PPO's 71 %.
+  - --look=1: the actor also reads a forward range sensor (hw.LOOK_*, tasks.Terrain.observe), so a deployable policy
+    can see the ground ahead. --teacher=1: the actor reads the whole privileged state through an encoder (as
+    train.py --teacher=1); not deployable, distill.py turns it into a student (its pkl snapshots are kept).
+  - RL Token residual (--base=policies/<run>.pkl; Xu et al. 2026, arXiv 2604.23073): the base policy is frozen; its
+    last hidden layer (128 numbers) is the "token" of the situation. A small actor reads the token and the base
+    action and outputs a correction, at most --resid_scale per joint: a = clip(a_base + scale * tanh(u)). The actor
+    loss adds --anchor * |a - a_base|^2, so it only moves away from the base where the critic says it pays. The
+    critics are new. Made for adapting a working policy with little data (on the real robot, or here a sim with
+    --shift=strength=0.55:0.7,mass_add=3:5: those bank fields redrawn in that range, for training and the held-out
+    test). policy.py runs the result (kind=residual: base and correction in one file).
+  - Symmetry augmentation (--sym=1): half of every batch is replaced by its left-right mirror image
+    (tasks.Task.mirror), so each transition also teaches the mirrored case and the gait is pushed toward symmetry.
 
     python train_sac.py --task=terrain --seed=0 --steps=400 --name=terrain_sac_s0
 
@@ -44,10 +56,13 @@ import train as Tr
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPT = dict(task="terrain", steps=400.0, envs=4096, cfgs=1040, chunk=25, updates=4, batch=16384, buffer=1_048_576,
            gamma=0.97, tau=0.1, lr_actor=3e-4, lr_critic=3e-4, lr_alpha=3e-4, ent_target=0.0, alpha0=0.001,
-           cdq=0, log_std_max=0.0, wd=0.001, b2=0.95,
+           cdq=0, log_std_max=0.0, wd=0.001, b2=0.95, sym=0, look=0, teacher=0, base="", resid_scale=0.3, anchor=1.0,
+           shift="",
            v_min=-10.0, v_max=50.0, atoms=101, n_step=3, start=0.5, eval_every=8.0, eval_n=4160, seed=0, bank_seed=0,
            name="", init="", w="", w_file="", nacon=24, njmax=160)
 ACTOR, CRITIC = (512, 256, 128), (768, 384, 192)
+RESID = (256, 256)
+RES = {}                                      # an RL Token run's frozen base (main sets it): fwd(ob) -> (token, a_base)
 LOG_STD = [-5.0, 0.0]                         # pre-tanh log std bounds; the upper one is --log_std_max
 
 
@@ -80,41 +95,92 @@ def ln_mlp(p, x):
     return x @ Wt.T + b
 
 
-def actor_dist(p, norm, ob):
-    nm_o, _ = Tr.split_norm(norm, ob.shape[-1])
-    out = Tr.mlp(p, Tr.normalise(nm_o, ob))
+def actor_dist(p, norm, ob, pv):
+    if RES:                                                               # a residual on the frozen base's token
+        tok, a_b = RES["fwd"](ob)
+        out = Tr.mlp(p, jp.concatenate([tok, a_b], -1))
+    elif isinstance(p, dict):                                             # a teacher: also reads the privileged state
+        out = Tr.actor_mean(p, norm, ob, pv)[0]
+    else:
+        nm_o, _ = Tr.split_norm(norm, ob.shape[-1])
+        out = Tr.mlp(p, Tr.normalise(nm_o, ob))
     mu, log_std = out[..., :12], jp.clip(out[..., 12:], *LOG_STD)
     return mu, log_std
 
 
-def sample(p, norm, ob, key):
+def sample(p, norm, ob, pv, key):
     """A tanh-squashed Gaussian action and its log-probability."""
-    mu, log_std = actor_dist(p, norm, ob)
+    mu, log_std = actor_dist(p, norm, ob, pv)
     u = mu + jp.exp(log_std) * jax.random.normal(key, mu.shape)
     a = jp.tanh(u)
     logp = jp.sum(-0.5 * ((u - mu) / jp.exp(log_std)) ** 2 - log_std - 0.5 * jp.log(2 * jp.pi), -1)
     logp = logp - jp.sum(2 * (jp.log(2.0) - u - jax.nn.softplus(-2 * u)), -1)      # log |d tanh(u) / du|
+    if RES:
+        a = jp.clip(RES["fwd"](ob)[1] + RES["scale"] * a, -1.0, 1.0)
+        logp = logp - 12 * jp.log(RES["scale"])
     return a, logp
 
 
-def deterministic(p, norm, ob):
-    return jp.tanh(actor_dist(p, norm, ob)[0])
+def deterministic(p, norm, ob, pv):
+    a = jp.tanh(actor_dist(p, norm, ob, pv)[0])
+    return jp.clip(RES["fwd"](ob)[1] + RES["scale"] * a, -1.0, 1.0) if RES else a
+
+
+def load_base(path, scale):
+    """The frozen base of an RL Token run: (token, base action) from the observation, with the base's own input
+    normalisation. The token is the policy network's last hidden layer."""
+    ck = pickle.load(open(path, "rb"))
+    bp = jax.tree_util.tree_map(jp.asarray, ck["params"]["actor"])
+    nm = jax.tree_util.tree_map(jp.asarray, ck["norm"])
+
+    def fwd(ob):
+        x = Tr.normalise(Tr.split_norm(nm, ob.shape[-1])[0], ob)
+        for Wt, b in bp[:-1]:
+            x = jax.nn.elu(x @ Wt.T + b)
+        Wt, b = bp[-1]
+        return x, jp.tanh((x @ Wt.T + b)[..., :12])
+    RES.update(fwd=jax.jit(fwd), scale=jp.float32(scale), params=bp, norm=nm, n_tok=bp[-1][0].shape[1])
+
+
+def shift_bank(task, spec):
+    """--shift=field=lo:hi,...: redraw those bank fields uniformly in the range (training and held-out banks)."""
+    ranges = {k: tuple(map(float, v.split(":"))) for k, v in (kv.split("=") for kv in spec.split(","))}
+    bank0 = task.bank
+
+    def bank(n, seed=0):
+        b, r = bank0(n, seed), np.random.default_rng(seed + 7777)
+        assert set(ranges) <= set(b), f"--shift: no such bank field in {sorted(b)}"
+        return dict(b, **{k: jp.asarray(r.uniform(lo, hi, n), jp.float32) for k, (lo, hi) in ranges.items()})
+    task.bank = bank
 
 
 def main():
     o = options()
     task = E.make_task(o["task"], o["weights"])
+    task.look = bool(o["look"])
+    if o["shift"]:
+        shift_bank(task, o["shift"])
+    if o["base"]:
+        load_base(o["base"], o["resid_scale"])
     n, n_cfg = o["envs"], o["cfgs"]
     env = E.GpuEnv(task, n, o["nacon"], o["njmax"])
     bank = task.bank(n_cfg, o["bank_seed"])
-    n_obs, n_priv = C.N_OBS, task.N_PRIV
+    n_obs, n_priv = task.n_obs, task.N_PRIV
     n_in = n_obs + n_priv
     support = jp.linspace(o["v_min"], o["v_max"], o["atoms"])
+    (m_oi, m_os), (m_pi, m_ps), (m_ai, m_as) = (tuple(jp.asarray(x) for x in pair) for pair in task.mirror())
     dz = (o["v_max"] - o["v_min"]) / (o["atoms"] - 1)
 
     key = jax.random.PRNGKey(o["seed"])
     key, ka, k1, k2 = jax.random.split(key, 4)
-    actor = Tr.mlp_init(ka, (n_obs,) + ACTOR + (24,), 0.01)
+    if o["base"]:
+        actor = Tr.mlp_init(ka, (RES["n_tok"] + 12,) + RESID + (24,), 0.01)
+    elif o["teacher"]:
+        ka, ke = jax.random.split(ka)
+        actor = dict(actor=Tr.mlp_init(ka, (n_obs + Tr.LATENT,) + ACTOR + (24,), 0.01),
+                     enc=Tr.mlp_init(ke, (n_priv,) + Tr.ENC + (Tr.LATENT,), 1.0))
+    else:
+        actor = Tr.mlp_init(ka, (n_obs,) + ACTOR + (24,), 0.01)
     critics = jax.vmap(lambda k: ln_mlp_init(k, (n_in + 12,) + CRITIC + (o["atoms"],)))(jp.stack([k1, k2]))
     params = dict(actor=actor, critics=critics, target=critics, log_alpha=jp.log(jp.float32(o["alpha0"])))
     norm = dict(mean=jp.zeros(n_in), var=jp.ones(n_in), count=jp.float32(1e-4))
@@ -168,13 +234,18 @@ def main():
             term_k = jp.where(alive > 0, B["term"][tk, e], 0.0)
             disc = disc * (1 - term_k)
             alive = alive * (1 - B["done"][tk, e])
-        return dict(obs=B["obs"][t, e], priv=B["priv"][t, e], a=B["a"][t, e], r=ret, disc=disc,
-                    obs2=B["obs2"][last, e], priv2=B["priv2"][last, e])
+        b = dict(obs=B["obs"][t, e], priv=B["priv"][t, e], a=B["a"][t, e], r=ret, disc=disc,
+                 obs2=B["obs2"][last, e], priv2=B["priv2"][last, e])
+        if o["sym"]:                                                          # mirror every other sample
+            flip = (jp.arange(o["batch"]) % 2 == 1)[:, None]
+            mir = dict(obs=(m_oi, m_os), obs2=(m_oi, m_os), priv=(m_pi, m_ps), priv2=(m_pi, m_ps), a=(m_ai, m_as))
+            b.update({k: jp.where(flip, b[k][:, i] * sg, b[k]) for k, (i, sg) in mir.items()})
+        return b
 
     def update(params, opts, norm, b, key):
         k1, k2 = jax.random.split(key)
         alpha = jp.exp(params["log_alpha"])
-        a2, logp2 = sample(params["actor"], norm, b["obs2"], k1)
+        a2, logp2 = sample(params["actor"], norm, b["obs2"], b["priv2"], k1)
         tl = q_logits(params["target"], norm, b["obs2"], b["priv2"], a2)
         tq = q_value(tl)
         if o["cdq"]:                                                         # the more pessimistic critic, per sample
@@ -191,9 +262,10 @@ def main():
         critics = optax.apply_updates(params["critics"], upd)
 
         def actor_loss(ap):
-            a, logp = sample(ap, norm, b["obs"], k2)
+            a, logp = sample(ap, norm, b["obs"], b["priv"], k2)
             qa = q_value(q_logits(critics, norm, b["obs"], b["priv"], a))
-            return jp.mean(alpha * logp - (qa.min(0) if o["cdq"] else qa.mean(0))), logp
+            pen = o["anchor"] * jp.sum((a - RES["fwd"](b["obs"])[1]) ** 2, -1) if RES else 0.0
+            return jp.mean(alpha * logp - (qa.min(0) if o["cdq"] else qa.mean(0)) + pen), logp
         (la, logp), g = jax.value_and_grad(actor_loss, has_aux=True)(params["actor"])
         upd, opts_a = opt_a.update(g, opts["a"], params["actor"])
         actor_p = optax.apply_updates(params["actor"], upd)
@@ -206,7 +278,7 @@ def main():
         return params, dict(a=opts_a, c=opts_c, l=opts_l), dict(critic_loss=lc, q=q, actor_loss=la, entropy=ent, alpha=alpha)
 
     step_v = jax.vmap(env.step, in_axes=(env.in_axes, 0, 0, 0, None, 0))
-    evaluate, bank_ev = Tr.make_evaluate(task, o, lambda p, nm, ob, pv: deterministic(p, nm, ob))
+    evaluate, bank_ev = Tr.make_evaluate(task, o, deterministic)
     terms0 = list(task.w)
     start_size = max(int(o["start"] * 1e6) // n, o["n_step"])
 
@@ -215,7 +287,7 @@ def main():
         def one(c, _):
             params, opts, norm, rb, (d, aux, mp, obs, priv, key) = c
             key, k_a, k_s, k_r, k_c, k_u = jax.random.split(key, 6)
-            a, _ = sample(params["actor"], norm, obs, k_a)
+            a, _ = sample(params["actor"], norm, obs, priv, k_a)
             d2, aux2, obs2, priv2, r, terms, done, trunc, success, fallen, err = step_v(env.mx.tree_replace(mp), d, aux, a, bank,
                                                                                         jax.random.split(k_s, n))
             term = (done & ~trunc).astype(jp.float32)                     # a time-out is not an ending: bootstrap
@@ -282,22 +354,38 @@ def main():
             with open(os.path.join(HERE, "logs", f"{o['name']}_eval.jsonl"), "a") as f:
                 f.write(json.dumps(dict(it=it, steps=steps, success=float(ok.mean()), table=table)) + "\n")
             print(f"   eval {steps / 1e6:6.1f} M  held-out success {ok.mean():.3f}", flush=True)
-            export(params, norm, o["task"], os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M.npz"))
-    export(params, norm, o["task"], os.path.join(HERE, "policies", f"{o['name']}.npz"))
-    pickle.dump(dict(params=jax.tree_util.tree_map(np.asarray, params), norm=jax.tree_util.tree_map(np.asarray, norm), task=o["task"]),
+            snap = os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M")
+            export(params, norm, task, snap + ".npz")
+            if o["teacher"]:
+                pickle.dump(dict(params=dict(actor=jax.tree_util.tree_map(np.asarray, params["actor"])), task=o["task"], algo="fastsac",
+                                 norm=jax.tree_util.tree_map(np.asarray, norm)), open(snap + ".pkl", "wb"))
+    export(params, norm, task, os.path.join(HERE, "policies", f"{o['name']}.npz"))
+    pickle.dump(dict(params=jax.tree_util.tree_map(np.asarray, params), norm=jax.tree_util.tree_map(np.asarray, norm), task=o["task"],
+                     algo="fastsac"),
                 open(os.path.join(HERE, "policies", f"{o['name']}.pkl"), "wb"))
     print("saved", o["name"], flush=True)
 
 
-def export(params, norm, task_name, path):
-    """policy.py format: the actor's mean head only, tanh output (squash=1)."""
+def export(params, norm, task, path):
+    """policy.py format: the actor's mean head only, tanh output (squash=1). A teacher is marked kind=teacher
+    (policy.py refuses it: it needs the privileged state)."""
     a = jax.tree_util.tree_map(np.asarray, params["actor"])
+    kind, extra = "mlp", {}
+    if isinstance(a, dict):
+        a, kind = a["actor"], "teacher"
+    if RES:                                     # the correction's layers; the base's go in the usual keys
+        extra = {f"res_{i}_{n}": x for i, (Wt, b) in enumerate(a) for n, x in (("weight", Wt[:12] if i == len(a) - 1 else Wt),
+                                                                             ("bias", b[:12] if i == len(a) - 1 else b))}
+        a, kind = jax.tree_util.tree_map(np.asarray, RES["params"]), "residual"
+        norm = RES["norm"]
+        extra["res_scale"] = float(RES["scale"])
     out = {f"mlp_extractor_policy_net_{2 * i}_weight": Wt for i, (Wt, b) in enumerate(a[:-1])}
     out.update({f"mlp_extractor_policy_net_{2 * i}_bias": b for i, (Wt, b) in enumerate(a[:-1])})
     nm = jax.tree_util.tree_map(np.asarray, norm)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    np.savez(path, obs_mean=nm["mean"][:C.N_OBS], obs_var=nm["var"][:C.N_OBS], clip_obs=10.0, epsilon=1e-8,
-             action_net_weight=a[-1][0][:12], action_net_bias=a[-1][1][:12], task=task_name, kind="mlp", squash=1, **out)
+    np.savez(path, obs_mean=nm["mean"][:task.n_obs], obs_var=nm["var"][:task.n_obs], clip_obs=10.0, epsilon=1e-8,
+             action_net_weight=a[-1][0][:12], action_net_bias=a[-1][1][:12], task=task.name, kind=kind, squash=1,
+             look=int(task.look), **out, **extra)
 
 
 if __name__ == "__main__":

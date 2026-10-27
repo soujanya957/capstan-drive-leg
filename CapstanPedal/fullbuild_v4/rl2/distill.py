@@ -12,6 +12,11 @@ at every step the teacher says what it would have done there. Loss = |a_student 
 
     python distill.py --teacher=terrain_teacher_s0 --name=terrain_student_s0 --steps=200
         --snap=best (default): the teacher snapshot with the best held-out success; --snap=last: policies/<teacher>.pkl
+        --look=1: the student also reads the forward range sensor (hw.LOOK_*): its encoder sees the 50 frames and the
+        sensor's 21 readings, so it can estimate the part of the teacher's height scan that lies ahead.
+
+A FastSAC teacher (train_sac.py --teacher=1) works the same way; its action is tanh of the policy's mean, and so is
+the student's.
 
 Writes policies/<name>.npz (a student: policy.py runs it, numpy only, ~2 MB; env.task_for gives it the 50-frame
 observation), snapshots policies/snaps/<name>/<steps>M.npz with logs/<name>_eval.jsonl (pick_best.py, progress.py),
@@ -34,7 +39,7 @@ import env as E
 import train as Tr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OPT = dict(teacher="", snap="best", name="", steps=200.0, envs=4096, cfgs=1040, unroll=24, epochs=4, minibatches=4,
+OPT = dict(teacher="", snap="best", name="", look=0, steps=200.0, envs=4096, cfgs=1040, unroll=24, epochs=4, minibatches=4,
            lr=5e-4, beta=0.2, z_w=1.0, eval_every=50, eval_n=4160, save=50, seed=0, bank_seed=0, nacon=24, njmax=160)
 PROJ, ENC = 16, (256, 64)                     # per-frame projection, then the history encoder to the latent
 
@@ -60,47 +65,61 @@ def load_teacher(o):
                 print(f"teacher {o['teacher']}: snapshot {e['steps'] / 1e6:.0f} M, held-out success {e['success']:.3f}", flush=True)
                 break
     ck = pickle.load(open(path, "rb"))
-    assert "enc" in ck["params"], f"{path} is not a teacher (train.py --teacher=1)"
-    return jax.tree_util.tree_map(jp.asarray, ck["params"]), jax.tree_util.tree_map(jp.asarray, ck["norm"]), ck["task"]
+    sac = ck.get("algo") == "fastsac"
+    p = ck["params"]["actor"] if sac else ck["params"]
+    assert "enc" in p, f"{path} is not a teacher (train.py / train_sac.py --teacher=1)"
+    return jax.tree_util.tree_map(jp.asarray, p), jax.tree_util.tree_map(jp.asarray, ck["norm"]), ck["task"], sac
 
 
-def student_act(sp, frame_norm, obs_norm, ob):
-    """The student: (action, latent estimate) from the 50-frame observation."""
-    fr = Tr.normalise(frame_norm, ob.reshape(ob.shape[:-1] + (C.N_LONG, C.N_FRAME)))
+def student_act(sp, frame_norm, obs_norm, look_norm, ob, sac):
+    """The student: (action, latent estimate) from the observation: [range-sensor readings,] 50 frames."""
+    nl = look_norm["mean"].shape[0]
+    fr = Tr.normalise(frame_norm, ob[..., nl:].reshape(ob.shape[:-1] + (C.N_LONG, C.N_FRAME)))
     Wt, b = sp["proj"]
     h = jax.nn.elu(fr @ Wt.T + b).reshape(ob.shape[:-1] + (C.N_LONG * PROJ,))
+    if nl:
+        h = jp.concatenate([h, Tr.normalise(look_norm, ob[..., :nl])], -1)
     z = Tr.mlp(sp["enc"], h)
     x = Tr.normalise(obs_norm, ob[..., -C.N_OBS:])
-    return Tr.mlp(sp["actor"], jp.concatenate([x, z], -1)), z
+    out = Tr.mlp(sp["actor"], jp.concatenate([x, z], -1))
+    return (jp.tanh(out[..., :12]) if sac else out), z
 
 
 def main():
     o = options()
-    tp, tnorm, task_name = load_teacher(o)
+    tp, tnorm, task_name, sac = load_teacher(o)
     task = E.make_task(task_name)
     task.obs_hist = C.N_LONG
+    task.look = bool(o["look"])
     n, n_cfg = o["envs"], o["cfgs"]
     env = E.GpuEnv(task, n, o["nacon"], o["njmax"])
     bank = task.bank(n_cfg, o["bank_seed"])
-    obs_norm, _ = Tr.split_norm(tnorm, C.N_OBS)
+    obs_norm, priv_norm = Tr.split_norm(tnorm, C.N_OBS)
     frame_norm = dict(mean=obs_norm["mean"][-C.N_FRAME:], var=obs_norm["var"][-C.N_FRAME:])   # the newest frame's statistics
+    li = task.look_index() if task.look else np.zeros(0, int)              # a reading's scale: the true scan point's
+    look_norm = dict(mean=priv_norm["mean"][li], var=priv_norm["var"][li])
+    n_in = C.N_LONG * PROJ + len(li)
 
     def teacher(ob, pv):
-        return Tr.actor_mean(tp, tnorm, ob[..., -C.N_OBS:], pv)
+        out, z = Tr.actor_mean(tp, tnorm, ob[..., -C.N_OBS:], pv)
+        return (jp.tanh(out[..., :12]) if sac else out), z
+
+    def student(sp, ob):
+        return student_act(sp, frame_norm, obs_norm, look_norm, ob, sac)
 
     key = jax.random.PRNGKey(o["seed"])
     key, k1, k2 = jax.random.split(key, 3)
-    sp = dict(proj=Tr.mlp_init(k1, (C.N_FRAME, PROJ), 1.0)[0], enc=Tr.mlp_init(k2, (C.N_LONG * PROJ,) + ENC + (Tr.LATENT,), 1.0),
+    sp = dict(proj=Tr.mlp_init(k1, (C.N_FRAME, PROJ), 1.0)[0], enc=Tr.mlp_init(k2, (n_in,) + ENC + (Tr.LATENT,), 1.0),
               actor=tp["actor"])                                         # the teacher's policy network, fine-tuned
     tx = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(o["lr"]))
     opt_state = tx.init(sp)
     step_v = jax.vmap(env.step, in_axes=(env.in_axes, 0, 0, 0, None, 0))
-    evaluate, bank_ev = Tr.make_evaluate(task, o, lambda p, nm, ob, pv: student_act(p, frame_norm, obs_norm, ob)[0])
+    evaluate, bank_ev = Tr.make_evaluate(task, o, lambda p, nm, ob, pv: student(p, ob)[0])
 
     def rollout(carry, _, sp, beta):
         d, aux, mp, obs, priv, key = carry
         key, k_s, k_r, k_c, k_b = jax.random.split(key, 5)
-        a_s, _ = student_act(sp, frame_norm, obs_norm, obs)
+        a_s, _ = student(sp, obs)
         a_t, z_t = teacher(obs, priv)
         a = jp.where((jax.random.uniform(k_b, (n,)) < beta)[:, None], a_t, a_s)
         d2, aux2, obs2, priv2, r, terms, done, trunc, success, fallen, err = step_v(env.mx.tree_replace(mp), d, aux, a, bank,
@@ -111,7 +130,7 @@ def main():
         return (d2, aux2, mp, obs2, priv2, key), tr
 
     def loss_fn(sp, b):
-        a, z = student_act(sp, frame_norm, obs_norm, b["obs"])
+        a, z = student(sp, b["obs"])
         la = jp.mean(jp.sum((a - b["a_t"]) ** 2, -1))
         lz = jp.mean(jp.sum((z - b["z_t"]) ** 2, -1))
         return la + o["z_w"] * lz, (la, lz)
@@ -171,14 +190,15 @@ def main():
             with open(os.path.join(HERE, "logs", f"{o['name']}_eval.jsonl"), "a") as f:
                 f.write(json.dumps(dict(it=it, steps=steps, success=float(ok.mean()), table=table)) + "\n")
             print(f"   eval {steps / 1e6:6.1f} M  held-out success {ok.mean():.3f}", flush=True)
-            export(sp, obs_norm, frame_norm, task_name, os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M.npz"))
+            export(sp, obs_norm, frame_norm, look_norm, sac, task_name, os.path.join(HERE, "policies", "snaps", o["name"], f"{steps // 1_000_000:05d}M.npz"))
         if (it + 1) % o["save"] == 0 or it == n_it - 1:
-            export(sp, obs_norm, frame_norm, task_name, os.path.join(HERE, "policies", f"{o['name']}.npz"))
+            export(sp, obs_norm, frame_norm, look_norm, sac, task_name, os.path.join(HERE, "policies", f"{o['name']}.npz"))
     print("saved", o["name"], flush=True)
 
 
-def export(sp, obs_norm, frame_norm, task_name, path):
-    """A student for policy.py: the policy network in the same keys as a plain policy, plus the history encoder."""
+def export(sp, obs_norm, frame_norm, look_norm, sac, task_name, path):
+    """A student for policy.py: the policy network in the same keys as a plain policy, plus the history encoder (and
+    the range-sensor readings' normalisation, look_mean / look_var, when it reads them)."""
     sp = jax.tree_util.tree_map(np.asarray, sp)
     a = sp["actor"]
     out = {f"mlp_extractor_policy_net_{2 * i}_weight": Wt for i, (Wt, b) in enumerate(a[:-1])}
@@ -188,8 +208,9 @@ def export(sp, obs_norm, frame_norm, task_name, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     np.savez(path, kind="student", n_hist=C.N_LONG, n_frame=C.N_FRAME, obs_mean=np.asarray(obs_norm["mean"]), obs_var=np.asarray(obs_norm["var"]),
              frame_mean=np.asarray(frame_norm["mean"]), frame_var=np.asarray(frame_norm["var"]), proj_weight=sp["proj"][0],
-             proj_bias=sp["proj"][1], clip_obs=10.0, epsilon=1e-8, action_net_weight=a[-1][0], action_net_bias=a[-1][1],
-             task=task_name, **out)
+             proj_bias=sp["proj"][1], clip_obs=10.0, epsilon=1e-8, action_net_weight=a[-1][0][:12], action_net_bias=a[-1][1][:12],
+             task=task_name, squash=int(sac), look=int(look_norm["mean"].shape[0] > 0), look_mean=np.asarray(look_norm["mean"]),
+             look_var=np.asarray(look_norm["var"]), **out)
 
 
 if __name__ == "__main__":

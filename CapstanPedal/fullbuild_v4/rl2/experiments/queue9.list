@@ -1,0 +1,12 @@
+terrain_rt_s0 train_sac.py --task=terrain --seed=0 --steps=30 --eval_every=2 --base=policies/terrain_fsac_s1.pkl --shift=strength=0.55:0.7,mass_add=3:5
+terrain_ft_s0 train_sac.py --task=terrain --seed=0 --steps=30 --eval_every=2 --init=policies/terrain_fsac_s1.pkl --shift=strength=0.55:0.7,mass_add=3:5
+terrain_shiftnew_s0 train_sac.py --task=terrain --seed=0 --steps=30 --eval_every=2 --shift=strength=0.55:0.7,mass_add=3:5
+terrain_sym_s0 train_sac.py --task=terrain --seed=0 --steps=150 --sym=1
+terrain_sym_s1 train_sac.py --task=terrain --seed=1 --steps=150 --sym=1
+terrain_sym_s2 train_sac.py --task=terrain --seed=2 --steps=150 --sym=1
+terrain_look_s0 train_sac.py --task=terrain --seed=0 --steps=150 --look=1
+terrain_look_s1 train_sac.py --task=terrain --seed=1 --steps=150 --look=1
+terrain_look_s2 train_sac.py --task=terrain --seed=2 --steps=150 --look=1
+terrain_steach_s0 train_sac.py --task=terrain --seed=0 --steps=150 --teacher=1
+terrain_slook_s0 distill.py --teacher=terrain_steach_s0 --look=1 --steps=200
+terrain_sblind_s0 distill.py --teacher=terrain_steach_s0 --steps=200

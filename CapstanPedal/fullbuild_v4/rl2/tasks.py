@@ -17,6 +17,7 @@ import jax.numpy as jp
 import numpy as np
 
 import core as C
+import hw
 
 SCALE = 0.1
 
@@ -47,6 +48,11 @@ class Task:
     N_PRIV = 16 + N_PRIV_TASK
     clock = False
     obs_hist = C.N_HIST                          # frames in the observation: N_LONG for a distilled student
+    look, N_LOOK = False, 0                      # a forward range sensor's readings, first in the observation (Terrain)
+
+    @property
+    def n_obs(self):
+        return (self.N_LOOK if self.look else 0) + self.obs_hist * C.N_FRAME
 
     def __init__(self, weights=None):
         self.w = dict(self.WEIGHTS)
@@ -58,6 +64,33 @@ class Task:
     def bind(self, L):
         self.L = L
         return self
+
+    def mirror_extra(self):
+        """The left-right mirror of the task's privileged part (see mirror()): index and sign per entry."""
+        return np.arange(self.N_PRIV_TASK), np.ones(self.N_PRIV_TASK)
+
+    def mirror_look(self):
+        return np.arange(self.N_LOOK), np.ones(self.N_LOOK)
+
+    def mirror(self):
+        """Left-right mirror images of an observation, privileged state and action, as (index, sign) pairs:
+        x_mirror = x[index] * sign. Reflecting the robot in its own x-z plane swaps the left and right pods
+        (LF <-> RF, LR <-> RR) and flips each ab/ad joint (hip and knee keep their sign; checked on the full model's
+        kinematics), negates side speeds, roll and yaw rates and the turn command, and shifts the trot clock half a
+        cycle (its offsets are mirror images: LF 0.5 / RF 0). Used for symmetry augmentation (train_sac.py --sym=1)."""
+        pod = np.array([2, 3, 0, 1])
+        j_idx = (pod[:, None] * 3 + np.arange(3)).ravel()
+        j_sgn = np.tile([-1.0, 1.0, 1.0], 4)
+        fi = np.concatenate([np.arange(13), 13 + j_idx, 25 + j_idx, 37 + j_idx, [49, 50]])
+        fs = np.concatenate([[-1, 1, -1], [1, -1, 1], [1, -1], [1, 1], [1, -1, -1], j_sgn, j_sgn, j_sgn, [-1, -1]])
+        n, nl = C.N_FRAME, (self.N_LOOK if self.look else 0)
+        li, ls = self.mirror_look()
+        oi = np.concatenate([li[:nl]] + [nl + k * n + fi for k in range(self.obs_hist)])
+        os_ = np.concatenate([ls[:nl], np.tile(fs, self.obs_hist)])
+        ei, es = self.mirror_extra()
+        pi = np.concatenate([np.arange(4), 4 + pod, np.arange(8, 16), 16 + ei])
+        ps = np.concatenate([[1, -1, 1, 1], np.ones(4), np.ones(8), es])
+        return (oi, os_.astype(np.float32)), (pi, ps.astype(np.float32)), (j_idx, j_sgn.astype(np.float32))
 
     # --- what every task shares ----------------------------------------------------------------------------
     def mparams(self, cfg):
@@ -294,6 +327,8 @@ class Terrain(Task):
     SCAN_SIDE = np.array([-0.12, 0.0, 0.12])
     N_PRIV_TASK = len(SCAN_FWD) * len(SCAN_SIDE) + 4
     N_PRIV = 16 + N_PRIV_TASK
+    LOOK_ROWS = np.flatnonzero(SCAN_FWD >= 0.1)                # the scan rows a forward range sensor sees
+    N_LOOK = len(LOOK_ROWS) * len(SCAN_SIDE)
     WEIGHTS = dict(track_lin=1.5, track_yaw=0.5, gait=0.3, air=1.0, bounce=-0.5, angvel=-0.05, tilt=-2.0, height=-5.0,
                    torque=-2e-4, action_rate=-0.01, slip=-0.2, fall=-10.0, success=10.0)
 
@@ -320,13 +355,49 @@ class Terrain(Task):
         L = self.L
         aux = self.base_aux(cfg, i, key)
         aux.update(air=jp.zeros(4))
+        if self.look:
+            aux.update(look=jp.zeros(self.N_LOOK), look_pitch=jax.random.uniform(jax.random.fold_in(key, 7), (),
+                                                                                 minval=-hw.LOOK_PITCH, maxval=hw.LOOK_PITCH))
         z = self.ground(cfg, 0.0, cfg["y0"]) + L.z0
         return self.qpos0(jp.array([0.0, cfg["y0"], z]), cfg["yaw0"]), jp.zeros(L.nv), aux, self.mparams(cfg) | self.mocap(cfg)
 
-    def extra(self, s, aux, cfg, feet=True):
+    def mirror_look(self):
+        ns = len(self.SCAN_SIDE)
+        return (np.arange(len(self.LOOK_ROWS))[:, None] * ns + np.arange(ns)[::-1]).ravel(), np.ones(self.N_LOOK)
+
+    def look_index(self):
+        """Where each look-ahead reading sits in the privileged state (its true value: the teacher's scan)."""
+        ns = len(self.SCAN_SIDE)
+        return 16 + (self.LOOK_ROWS[:, None] * ns + np.arange(ns)).ravel()
+
+    def scan_pts(self, s, fwd_d):
         yaw = jp.arctan2(s["R"][1, 0], s["R"][0, 0])
         fwd, side = -jp.array([jp.cos(yaw), jp.sin(yaw)]), jp.array([-jp.sin(yaw), jp.cos(yaw)])
-        pts = (s["p"][:2] + jp.asarray(self.SCAN_FWD)[:, None, None] * fwd + jp.asarray(self.SCAN_SIDE)[None, :, None] * side).reshape(-1, 2)
+        return (s["p"][:2] + jp.asarray(fwd_d)[:, None, None] * fwd + jp.asarray(self.SCAN_SIDE)[None, :, None] * side).reshape(-1, 2)
+
+    def observe(self, s, aux, cfg, key, first=False):
+        """With look = True, the forward range sensor's readings come first: ground height at the look-ahead points
+        (scaled as the scan), updated at LOOK_HZ, noisy, biased by a per-episode pitch error, zones sometimes lost."""
+        k1, k2, k3, k4 = jax.random.split(key, 4)
+        aux, obs = super().observe(s, aux, cfg, k1, first)
+        if not self.look:
+            return aux, obs
+        d = jp.repeat(jp.asarray(self.SCAN_FWD[self.LOOK_ROWS]), len(self.SCAN_SIDE))
+        gz = jax.vmap(lambda q: self.ground(cfg, q[0], q[1]))(self.scan_pts(s, self.SCAN_FWD[self.LOOK_ROWS]))
+        h = s["p"][2] - gz - self.L.z_stand + d * jp.tan(aux["look_pitch"])
+        h = h + jax.random.normal(k2, h.shape) * (hw.LOOK_NOISE + hw.LOOK_REL * d)
+        upd = first | (aux["t"] % round(hw.POLICY_HZ / hw.LOOK_HZ) == 0)
+        keep = ~first & (~upd | (jax.random.uniform(k3, h.shape) < hw.LOOK_DROP))
+        look = jp.where(keep, aux["look"], h * 5.0)
+        return dict(aux, look=look), jp.concatenate([look, obs])
+
+    def mirror_extra(self):
+        nf, ns = len(self.SCAN_FWD), len(self.SCAN_SIDE)
+        scan = (np.arange(nf)[:, None] * ns + np.arange(ns)[::-1]).ravel()
+        return np.concatenate([scan, nf * ns + np.array([2, 3, 0, 1])]), np.ones(self.N_PRIV_TASK)
+
+    def extra(self, s, aux, cfg, feet=True):
+        pts = self.scan_pts(s, self.SCAN_FWD)
         gz = jax.vmap(lambda q: self.ground(cfg, q[0], q[1]))(pts)
         scan = (s["p"][2] - gz - self.L.z_stand) * 5.0
         fz = jax.vmap(lambda f: self.ground(cfg, f[0], f[1]))(s["feet"])
@@ -443,6 +514,10 @@ class Balance(Task):
     extras = ("board",)
     WEIGHTS = dict(alive=1.0, board_level=-3.0, upright=-2.0, ball_drift=-0.5, feet_on=0.5, rel_vel=-0.5, angvel=-0.05,
                    torque=-1e-4, action_rate=-0.01, fall=-10.0, success=10.0)
+
+    def mirror_extra(self):
+        """Board tilt, ball and robot-to-board offsets: x, y each, in the world frame (the robot starts facing -X)."""
+        return np.arange(6), np.array([1.0, -1.0] * 3)
 
     def bank(self, n, seed=0):
         r = np.random.default_rng(seed)

@@ -28,6 +28,7 @@ def task_for(path):
     z = np.load(path)
     task = make_task(str(z["task"]))
     task.obs_hist = int(z["n_hist"]) if "n_hist" in z.files else C.N_HIST
+    task.look = "look" in z.files and bool(z["look"])                   # reads the forward range sensor too
     return task
 
 
