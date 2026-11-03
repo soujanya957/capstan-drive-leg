@@ -47,7 +47,7 @@ for r, phi in itertools.product([x * g.L4_K for x in (175.0, 200.0, 259.8, 290.0
               "Leg4_Shin": Pos(k[0] - k0[0], 0, k[1] - k0[1]) * rot(legs4["Leg4_Shin"][1], ta, *k0),
               "Leg4_Coupler": Pos(c[0] - c0[0], 0, c[1] - c0[1]) * rot(legs4["Leg4_Coupler"][1], tb, *c0)}
     with_shin = lambda p: Pos(k[0] - k0[0], 0, k[1] - k0[1]) * rot(p, ta, *k0)
-    for n_ in ("Leg4_Foot", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"):    # ride on the shin
+    for n_ in g.FOOT_PARTS + ("Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"):    # ride on the shin
         placed[n_] = with_shin(legs4[n_][1])
     joint_at = {"knee": (k0, k), "crank": (c0, c), "lever": (d0, d)}
     hw = {n: [with_shin(so) if j == "shin" else
@@ -71,6 +71,8 @@ for r, phi in itertools.product([x * g.L4_K for x in (175.0, 200.0, 259.8, 290.0
             for m, o in rig + list(placed.items()):
                 if n.endswith("shin_inserts") and m in ("Leg4_Shin_Plate_Back", "Leg4_Shin"):
                     continue                                 # v9.1: a heat-set insert's knurl sits in its plate
+                if n.endswith("foot_inserts") and m == "Leg4_Foot_Core_B":
+                    continue                                 # the foot core's inserts, likewise
                 x = so & o
                 if x is not None and x.volume > 2.0:                     # washers sit flat on the links
                     hits.append((n, m, round(x.volume, 1)))
@@ -79,6 +81,8 @@ for r, phi in itertools.product([x * g.L4_K for x in (175.0, 200.0, 259.8, 290.0
             for m, o in rig + list(placed.items()):
                 if n.endswith("shin_inserts") and m in ("Leg4_Shin_Plate_Back", "Leg4_Shin"):
                     continue                                 # v9.1: a heat-set insert's knurl sits in its plate
+                if n.endswith("foot_inserts") and m == "Leg4_Foot_Core_B":
+                    continue                                 # the foot core's inserts, likewise
                 x = so & o
                 if x is not None and x.volume > 2.0:                     # washers sit flat on the links
                     hits.append((n, m, round(x.volume, 1)))

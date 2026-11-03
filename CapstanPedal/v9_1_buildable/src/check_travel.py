@@ -44,7 +44,7 @@ def pose(ta, tb):
     placed = {"Leg4_Thigh": rot(legs4["Leg4_Thigh"][1], tb, ox, oz),
               "Leg4_Crank": rot(legs4["Leg4_Crank"][1], ta, ox, oz),
               "Leg4_Coupler": Pos(c[0] - c0[0], 0, c[1] - c0[1]) * rot(legs4["Leg4_Coupler"][1], tb, *c0)}
-    for n in ("Leg4_Shin", "Leg4_Foot", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"):
+    for n in ("Leg4_Shin", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front") + g.FOOT_PARTS:
         placed[n] = with_shin(legs4[n][1])
     rig = []
     for n, (_, pl, _) in parts.items():
@@ -70,7 +70,7 @@ def clashes(placed, rig):
                 if x is not None and x.volume > 0.5:
                     hits.append((n, m, round(x.volume, 1)))
     for (n, p), (m, o) in itertools.combinations(links, 2):
-        if {n, m} <= {"Leg4_Shin", "Leg4_Foot", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"}:
+        if {n, m} <= {"Leg4_Shin", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front", *g.FOOT_PARTS}:
             continue                                               # one rigid body
         if touch(bb(p), bb(o)):
             x = p & o

@@ -1,0 +1,33 @@
+part,qty,role,source
+A_Shaft_Cap,1,pod,../../v9_1_buildable/print/A_Shaft_Cap.stl
+Abad_Drum,1,pod,../../v9_1_buildable/print/abad/Abad_Drum.stl
+Abad_Small_Drum,1,pod,../../v9_1_buildable/print/abad/Abad_Small_Drum.stl
+Big_Drum_A,1,pod,../../v9_1_buildable/print/Big_Drum_A.stl
+Big_Drum_B,1,pod,../../v9_1_buildable/print/Big_Drum_B.stl
+End_Bracket,1,pod,../../v9_1_buildable/print/End_Bracket.stl
+End_Bracket_Front,1,pod,../../v9_1_buildable/print/abad/End_Bracket_Front.stl
+Front_Wall,1,pod,../../v9_1_buildable/print/Front_Wall.stl
+Gantry,1,pod,../../v9_1_buildable/print/Gantry.stl
+Gantry_Post,2,pod,../../v9_1_buildable/print/Gantry_Post.stl
+Hip_Front_Plate,1,bench only (the robot's bulkheads replace it),../../v9_1_buildable/print/abad/Hip_Front_Plate.stl
+Hip_Inner_Plate,1,bench only (the robot's bulkheads replace it),../../v9_1_buildable/print/abad/Hip_Inner_Plate.stl
+Hip_Outer_Plate,1,bench only (the robot's bulkheads replace it),../../v9_1_buildable/print/abad/Hip_Outer_Plate.stl
+Hip_Posts,2,pod,../../v9_1_buildable/print/abad/Hip_Post.stl
+Hip_Spine,1,bench only (the robot's bulkheads replace it),../../v9_1_buildable/print/abad/Hip_Spine.stl
+Hip_Trunnion,1,pod,../../v9_1_buildable/print/abad/Hip_Trunnion.stl
+Leg4_Coupler,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Coupler.stl
+Leg4_Crank,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Crank.stl
+Leg4_Foot,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Foot.stl
+Leg4_Foot_Core_A,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Foot_Core_A.stl
+Leg4_Foot_Core_B,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Foot_Core_B.stl
+Leg4_Shin,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Shin.stl
+Leg4_Shin_Plate_Back,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Shin_Plate_Back.stl
+Leg4_Shin_Plate_Front,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Shin_Plate_Front.stl
+Leg4_Thigh,1,pod,../../v9_1_buildable/print/leg_4bar/Leg4_Thigh.stl
+Motor_Plate,1,pod,../../v9_1_buildable/print/Motor_Plate.stl
+Output_Flange_A,1,pod,../../v9_1_buildable/print/Output_Flange_A.stl
+Output_Flange_B,1,pod,../../v9_1_buildable/print/Output_Flange_B.stl
+Post,2,pod,../../v9_1_buildable/print/Post.stl
+Small_Drum_A,1,pod,../../v9_1_buildable/print/Small_Drum_A.stl
+Small_Drum_B,1,pod,../../v9_1_buildable/print/Small_Drum_B.stl
+Top_Rail,2,pod,../../v9_1_buildable/print/Top_Rail.stl

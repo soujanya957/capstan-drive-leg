@@ -115,7 +115,7 @@ def xz_rot(angle, pivot0, pivot):
 def classify(v):
     base = v["base"]
     rides = v.get("abad") != "fixed"
-    if base in ("Leg4_Shin", "Leg4_Foot") or base.startswith("Leg4_Shin_Plate"):
+    if base == "Leg4_Shin" or base.startswith(("Leg4_Foot", "Leg4_Shin_Plate")):
         return "shin", rides
     if base == "Leg4_Coupler":
         return "coupler", rides

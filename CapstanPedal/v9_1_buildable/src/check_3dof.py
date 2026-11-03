@@ -59,7 +59,7 @@ def module_at(ta, tb, qt, qs):
             ("Leg4_Shin", Pos(k[0] - k0[0], 0, k[1] - k0[1]) * rot(legs4["Leg4_Shin"][1], ta, *k0)),
             ("Leg4_Coupler", Pos(c[0] - c0[0], 0, c[1] - c0[1]) * rot(legs4["Leg4_Coupler"][1], tb, *c0))]
     with_shin = lambda p: Pos(k[0] - k0[0], 0, k[1] - k0[1]) * rot(p, ta, *k0)
-    for n_ in ("Leg4_Foot", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"):
+    for n_ in g.FOOT_PARTS + ("Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"):
         out.append((n_, with_shin(legs4[n_][1])))
     at = {"knee": (k0, k), "crank": (c0, c), "lever": (d0, d)}
     for n, (cc, _, j, _) in hw4.items():

@@ -24,7 +24,7 @@ Suppliers and part numbers are not checked: confirm lengths against your hardwar
 | 1 | 6000ZZ (10 × 26 × 8) | knee |
 | 2 | 636ZZ (6 × 22 × 7) | coupler on the crank pin; the shin's lever pin |
 
-## Heat-set inserts (61)
+## Heat-set inserts (63)
 
 | Qty | Size | Where |
 |---|---|---|
@@ -34,6 +34,7 @@ Suppliers and part numbers are not checked: confirm lengths against your hardwar
 | 6 | M3 | flange B (the thigh's screws) |
 | 6 | M3 | drum B's journal end (flange B) |
 | 3 | M3, short (≤ 4 mm) | shin back plate, pressed from its outer face |
+| 2 | M3 | foot core half B, pressed from its outer face |
 | 8 | M4 (Ø5.6 hole) | ab/ad hub's end face (the rear end bracket) |
 | 8 | M4 | posts, both ends |
 | 2 | M4 | front wall (gantry bolts) |
@@ -50,7 +51,7 @@ Suppliers and part numbers are not checked: confirm lengths against your hardwar
 | 16 | M3 × 10 socket head | crank → flange A (6), flange A → nose (4), thigh → flange B (6) |
 | 6 | M3 × 16 socket head | flange B → drum B's journal |
 | 3 | M3 × 16 countersunk | shin sandwich |
-| 2 + 2 | M3 × 40 + M3 nylon-insert nut | foot |
+| 2 | M3 × 16 socket head | foot core: half A → half B's inserts, clamping the shin's claw |
 | 12 | M4 × 12 countersunk (DIN 7991) | motor stators, 4 each |
 | 4 | M4 × 10 countersunk | trunnion → front end bracket |
 | 8 | M4 × 16 socket head | rear end bracket → ab/ad hub's inserts |
@@ -73,6 +74,6 @@ Suppliers and part numbers are not checked: confirm lengths against your hardwar
 
 ## Print (Bambu Lab H2C; `src/check_stl.py` checks every file)
 
-PETG, 0.4 mm nozzle; `print/` holds every part in its print orientation. Print the **fit coupon** first
+PETG, 0.4 mm nozzle; `print/` holds every part in its print orientation. Print the **foot tread** in TPU 95A (85A grips better, wears faster), 3 walls and 20 % gyroid infill so it gives a little; everything else in PETG. Print the **fit coupon** first
 (README: *Fits and the test coupon*). Drum colours in the films: drum A teal, drum B orange, ab/ad drum
 violet; print them in any colour.

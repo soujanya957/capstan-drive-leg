@@ -78,7 +78,7 @@ def pair_with_screws(meta):
         if not f or f["kind"] not in ("insert", "nut", "washer"):
             continue
         c, d = np.array(f["mid"]), np.array(f["dir"])
-        reverse = "shin_inserts" in v.get("part", "")              # v9.1: pressed in from the back plate's outer face
+        reverse = any(n in v.get("part", "") for n in ("shin_inserts", "foot_inserts"))   # pressed from the far face              # v9.1: pressed in from the back plate's outer face
         best = None
         for m, sd, L in screws:
             if abs(abs(sd @ d) - 1.0) > 0.01:

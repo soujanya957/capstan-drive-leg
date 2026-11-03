@@ -24,6 +24,20 @@ order, that every screw, insert and nut can actually be reached when it is fitte
 | Knee callout | film said "M6 × 30" | **Ø10 × 20 shoulder screw (ISO 7379, M8 thread), Ø20 washer, Ø13 spacer, M8 nylon nut** | it was always a 6000 on a Ø10 shoulder screw in the CAD |
 | Drum colours | all red | **drum A teal, drum B orange, ab/ad drum violet** | tell the three capstans apart |
 
+## The foot (changed after v9.1)
+
+v9.1's foot was one TPU bulb pushed over the shin's claw, held by 2× M3 × 40 through the soft TPU. The screws
+clamped rubber (it creeps, so they loosen), the whole bulb was the wear part, and changing it meant two long screws
+and nuts. Now it is three parts, with the same 23 mm contact sphere, so the URDF, the sim and the policies are unchanged:
+
+| Part | Material | What it does |
+|---|---|---|
+| `Leg4_Foot_Core_A`, `_B` | PETG or PC | two halves either side of the claw: a hub inside its ring and a bridge in the gap between its prongs, so the core cannot turn. 2× M3 × 16 from A into M3 inserts in B; the cheeks clamp the 8 mm claw (the hub faces stop 0.15 short of the middle) |
+| `Leg4_Foot` (tread) | TPU 95A (85A: more grip, faster wear) | the contact sphere, 9 mm thick under the foot. Snaps 0.6 mm past the core's equator; the core's bottom flat and cheeks key it against rolling. 9 grooves across the rolling direction, 2 along it |
+
+A worn tread pulls off and a new one snaps on; the core and its screws stay on the leg. The claw's two prong
+holes are no longer used.
+
 ## v9 (summary)
 
 9:1 capstans (v8: 8:1): 31.5 N·m per output at the moteus 40 A limit; a 6903 on output A's stub in the
@@ -35,7 +49,7 @@ end brackets with lightening windows. 200 mm thigh and shin, ±90° outputs, kne
 - **Nothing is screwed into a nut you cannot reach.** Every nut left is on an open face: the three pin
   stacks (nylon-insert nuts on M6 / M8, held with a spanner) and the six tensioner pegs' nuts (dropped
   into their slots before the drum goes in).
-- **Heat-set inserts everywhere else** (M2.5 ×12, M3 ×25, M4 ×24 per leg module). Press each one before
+- **Heat-set inserts everywhere else** (M2.5 ×12, M3 ×27, M4 ×24 per leg module). Press each one before
   its part is closed in; the film shows when. Inserts in a screw's pull direction are pressed from the far
   side so the screw pulls them deeper.
 - **The film's order is the build order.** `src/check_assembly.py` replays it: for each screw a 60 mm hex

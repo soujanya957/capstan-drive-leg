@@ -63,7 +63,8 @@ check_insertion("Leg4_Thigh", ["Front_Wall", "Big_Drum_A", "Big_Drum_B", "Output
 check_insertion("Output_Flange_A", ["Front_Wall", "Big_Drum_A", "Big_Drum_B", "Output_Flange_B", "Leg4_Thigh"])
 check_insertion("Leg4_Crank", ["Front_Wall", "Big_Drum_A", "Big_Drum_B", "Output_Flange_B", "Leg4_Thigh", "Output_Flange_A"])
 check_insertion("Gantry", ["Front_Wall", "Big_Drum_A", "Big_Drum_B", "Output_Flange_B", "Leg4_Thigh", "Output_Flange_A",
-                           "Leg4_Crank", "Leg4_Shin", "Leg4_Coupler", "Leg4_Foot", "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"])
+                           "Leg4_Crank", "Leg4_Shin", "Leg4_Coupler", "Leg4_Foot", "Leg4_Foot_Core_A", "Leg4_Foot_Core_B",
+                           "Leg4_Shin_Plate_Back", "Leg4_Shin_Plate_Front"])
 
 
 def check_insertion_x(name, fixed, sign=-1, carry=()):

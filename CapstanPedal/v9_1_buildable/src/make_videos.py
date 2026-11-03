@@ -1377,7 +1377,8 @@ def leg_film(meta, verts, part="full", variant="fivebar"):
             qt, qs = pose(t)
             return turn("c", math.radians(qt - L4_Q0["thigh"]), L4_C0, leg4_points(qt, qs)[2])
         F.custom["Leg4_Shin"] = shin4
-        F.custom["Leg4_Foot"] = shin4                              # the bulb rides on the shin's claw
+        for k in L("Leg4_Foot"):                                  # tread and core halves ride on the shin's claw
+            F.custom[k] = shin4
         for k in L("Leg4_Shin_Plate"):                             # v6 sandwich plates ride on the shin
             F.custom[k] = shin4
         F.custom["Leg4_Coupler"] = coupler4
@@ -1595,7 +1596,8 @@ def author_variant(meta, verts, vname, tris=None):
         "flB": P("Output_Flange_B"), "armB": P("Leg4_Thigh", "Test_Arm_B"),
         "flA": P("Output_Flange_A"), "armA": P("Leg4_Crank", "Test_Arm_A"),
         "shin": P("Leg4_Shin", "Leg4_HW_knee_brg", "Leg4_HW_lever_brg"),
-        "coupler": P("Leg4_Coupler", "Leg4_HW_crank_brg"), "foot": P("Leg4_Foot"),
+        "coupler": P("Leg4_Coupler", "Leg4_HW_crank_brg"), "foot": [k for k in P("Leg4_Foot") if not k.startswith("Leg4_Foot_Core")],
+        "foot_a": P("Leg4_Foot_Core_A"), "foot_b": P("Leg4_Foot_Core_B"),
         "gposts": P("Gantry_Post"), "gantry": [k for k in P("Gantry", "REF_Bearing_17x30_gantry") if not k.startswith("Gantry_Post")],
         "ab_hub": P("Abad_Drum", "Abad_Slider", "Abad_REF_Tensioner_minus_nut", "Abad_REF_Tensioner_plus_nut", "Abad_Bearings_6808"),
         "ab_inner": P("Hip_Inner_Plate"), "ab_posts": P("Hip_Posts"),
@@ -1649,6 +1651,7 @@ def author_variant(meta, verts, vname, tris=None):
            "drumA": y(220), "cap": y(-60), "drumB": y(240), "posts": (0, 80, 140 if leg else -140), "wall": y(160),
            "bracket": (-140, 0, 0), "bracket_f": (140, 0, 0), "trunnion": (60, 0, 0), "cradle_f": (120, 0, 0),
            "flB": (0, 170, 60 if leg else -60), "armB": y(110), "flA": y(110), "armA": y(120), "shin": y(130), "coupler": y(120), "foot": (0, 0, -80),
+           "foot_a": y(-60), "foot_b": y(60),
            "gposts": y(110), "gantry": y(130), "mount": zz(160) if not abad else y(-160), "stand": y(-400)}
     for g_, v in off.items():
         labs = G[g_] + pre.get(g_, [])
@@ -1836,8 +1839,13 @@ def author_variant(meta, verts, vname, tris=None):
         S("Coupler", "Its 636 on the crank pin; the far end on the shin's lever; the rib faces the crank", [G["coupler"]], side, -8, margin=1.1)
         fit("Crank pin", "M6 × 25, washer, Ø9 spacer and shim, nylon-insert nut", H("Leg4_HW_crank_pin"))
         fit("Lever pin", "M6 × 35, Ø9 spacers either side of the lever's 636, nylon-insert nut", H("Leg4_HW_lever_pin"))
-        S("Bulb foot", "Slips over the shin's claw", [G["foot"]], side, -8, margin=1.6)
-        fit("Foot screws", "2× M3 × 40 through the bulb and the claw's prongs, nylon-insert nuts", H("Leg4_HW_foot_screws"))
+        S("Foot core", "Two rigid halves either side of the shin's claw: hub in the ring, bridge between the prongs",
+          [G["foot_a"], G["foot_b"]], side, -8, margin=1.8, stagger=0.6)
+        fit("Foot inserts", "2× M3 heat-set inserts in half B's outer face (pressed on the bench; the screws pull them deeper)",
+            H("Leg4_HW_foot_inserts"))
+        fit("Foot screws", "2× M3 × 16 from half A into half B's inserts: the cheeks clamp the claw", H("Leg4_HW_foot_screws"))
+        S("Foot tread", "TPU, snaps over the core's equator; the core's flats key it. Swap it when it wears", [G["foot"]],
+          side, -8, margin=1.8)
     if gantry:
         S("Gantry posts", "Ø20 posts on the wall's inserts", [G["gposts"]], side - 20, -8, margin=1.4)
         S("Front gantry", "In the coupler's plane; its 6902 slides onto the crank's (or arm A's) stub",

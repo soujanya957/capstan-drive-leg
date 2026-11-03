@@ -973,8 +973,16 @@ L4_LEN = float(os.environ.get("CAPSTAN_LEG_L", "200"))
 L4_K = L4_LEN / 150.0                 # shin features along its length scale with it
 L4_L1, L4_L2, L4_C = L4_LEN, L4_LEN, 55.0
 L4_DELTA = -20.0                      # shin lever bent 20 deg off the shin line (a boomerang shin)
-L4_FOOT_R = 23.0                      # bulb foot radius (soft TPU / cast silicone, as on Stanley)
-L4_CLAW_R = (13.0, 19.0)              # the shin's two-prong claw, inside the bulb
+L4_FOOT_R = 23.0                      # foot contact radius (the tread's outside; the sim's foot sphere)
+L4_CLAW_R = (13.0, 19.0)              # the shin's two-prong claw, inside the foot
+# v9.2 foot: a rigid core in two halves clamped on the claw by 2x M3 x 16, and a TPU tread snapped over it
+FOOT_CORE_R, FOOT_CORE_Z = 20.5, 10.0  # core: sphere r, cut to +-z (the cheeks' outer faces)
+FOOT_FLAT_Y = -14.0                    # core's bottom flat: keys the tread against rolling; 9 mm of TPU under the foot
+FOOT_SNAP_Y = 5.0                      # tread's rim, 5 mm past the core's equator: a 0.6 mm snap
+FOOT_SLOT, FOOT_SPLIT = 4.1, 0.15      # cheeks' inner faces 0.1 clear of the 8 mm claw; the halves' hub faces stop
+                                       # 0.15 short of the middle, so the screws clamp the claw, not the hub
+FOOT_SCREWS = [(-6.5, -3.5), (6.5, -3.5)]   # foot-local (x, y): through the hub, below the shin's neck
+FOOT_PARTS = ("Leg4_Foot", "Leg4_Foot_Core_A", "Leg4_Foot_Core_B")             # all ride on the shin
 L4_Q0 = {"thigh": -60.0, "shin": -120.0}                       # rest angles (deg, global XZ), outputs centred
 L4_Y = {"Leg4_Thigh": 111.0, "Leg4_Shin": 119.5, "Leg4_Crank": 128.0, "Leg4_Coupler": 136.5}
 
@@ -1054,20 +1062,45 @@ def leg4_claw():
     return c
 
 
+def foot_envelope():
+    """The core's outside (foot-local: z = the shin plane's mid-depth, origin on the foot point)."""
+    big = Box(80.0, 80.0, 80.0, align=(Align.CENTER, Align.MIN, Align.CENTER))
+    return Sphere(FOOT_CORE_R) & Box(2 * FOOT_CORE_R, 2 * FOOT_CORE_R, 2 * FOOT_CORE_Z) & Pos(0, FOOT_FLAT_Y, 0) * big
+
+
+def leg4_foot_core(half):
+    """One half of the foot's rigid core (PETG / PC), half 'A' (z < 0, screw heads) or 'B' (z > 0, M3 inserts
+    pressed from its outer face, so the screws pull them deeper). Cheeks either side of the claw; between them a
+    hub inside the claw's ring and a bridge in the gap between its prongs, so the core cannot turn on the claw.
+    Neither half touches the claw's prong holes (v9.1's cross screws), which stay unused."""
+    r0, _ = L4_CLAW_R
+    keep = Cylinder(r0 - 0.2, 2 * FOOT_SLOT) + Pos(0, 0, -FOOT_SLOT) * pie(FOOT_CORE_R + 2.0, -136.0, -44.0, 2 * FOOT_SLOT)
+    keep -= Pos(4.0, L4_FOOT_R * 0.6, 0) * Box(30.0, L4_FOOT_R, 2 * FOOT_SLOT + 1.0)    # the shin's neck enters the ring here
+    c = foot_envelope() - (Box(80.0, 80.0, 2 * FOOT_SLOT) - keep) - Box(80.0, 80.0, 2 * FOOT_SPLIT)
+    sz = -1.0 if half == "A" else 1.0
+    c &= Pos(0, 0, sz * 20.0) * Box(80.0, 80.0, 40.0)
+    for x, y in FOOT_SCREWS:
+        c -= Pos(x, y, -20.0) * Cylinder(M3_CLR / 2, 40.0, align=MIN)
+        if half == "A":
+            c -= Pos(x, y, -FOOT_CORE_Z - 0.01) * Cylinder(3.2, 3.21, align=MIN)              # M3 head counterbore
+        else:
+            c -= Pos(x, y, FOOT_CORE_Z - 6.0) * Cylinder(M3_INSERT / 2, 6.01, align=MIN)      # M3 x 5.7 insert
+    return c
+
+
 def leg4_foot():
-    """Bulb foot (local z = shin plane mid-depth, centred on the foot point): a slightly flattened ball
-    with an annular slot for the claw and two M3 cross holes. Print in TPU or cast in silicone."""
+    """TPU tread (95A; 85A grips better and wears faster), foot-local as leg4_foot_core: the 23 mm contact
+    sphere (flattened across the shin, as v9.1's bulb) over the core, snapped 0.6 mm past its equator, keyed
+    by the core's flats. Its lower half carries 9 grooves across the rolling direction and 2 along it, 1.2 deep.
+    Replace it when worn; the core stays on the leg."""
     r = L4_FOOT_R
-    b = Sphere(r) & Box(2 * r, 2 * r, 2 * r * 0.8)                          # flattened across the shin
-    r0, r1 = L4_CLAW_R
-    b -= (Cylinder(r1 + 0.4, 8.6) - Cylinder(r0 - 0.4, 8.6)) - pie(r1 + 2.0, -140.0, -40.0, 8.6).moved(Pos(0, 0, -4.3))
-    b -= Pos(4.0, r * 0.6, 0) * Box(30.0, r, 8.6)                            # entry for the shin above the claw
-    for a in (-90.0 - 62.0, -90.0 + 62.0):
-        x, y = polar((r0 + r1) / 2, a)
-        b -= Pos(x, y, 0) * Cylinder(M3_CLR / 2, 2 * r)
-        for sgn in (-1, 1):
-            b -= Pos(x, y, sgn * (r * 0.8 - 2.5)) * Cylinder(3.0, 5.0)          # counterbore / nut pocket
-    return b
+    big = Box(80.0, 80.0, 80.0, align=(Align.CENTER, Align.MAX, Align.CENTER))
+    t = (Sphere(r) & Box(2 * r, 2 * r, 2 * r * 0.8)) - foot_envelope()
+    t &= Pos(0, FOOT_SNAP_Y, 0) * big
+    grooves = Pos(0, 0, -7.0) * Box(80.0, 80.0, 1.4) + Pos(0, 0, 7.0) * Box(80.0, 80.0, 1.4)
+    for k in range(-4, 5):
+        grooves += Rot(0, 0, -90.0 + 12.0 * k) * Box(40.0, 1.4, 80.0, align=(Align.MIN, Align.CENTER, Align.CENTER))
+    return t - (grooves & (Sphere(r + 1.0) - Sphere(r - 1.2)) & Pos(0, -9.0, 0) * big)
 
 
 # v6 sandwich shin (Stanley's tibia / fibula): the 8 mm core (knee, lever, claw) plus a 4 mm plate on
@@ -1188,7 +1221,15 @@ def leg4_parts(gantry=True):
                                                                    L4_Y["Leg4_Shin"] - SHIN_PLATE_T, *k), "black"),
             "Leg4_Shin_Plate_Front": (leg4_shin_plate(True), to_y(Rot(0, 0, 90.0 - qs) * leg4_shin_plate(True),
                                                                   L4_Y["Leg4_Shin"] + 8.0, *k), "black"),
-            "Leg4_Foot": (leg4_foot(), to_y(Rot(0, 0, 90.0 - qs) * Pos(0, -L4_L2, 4.0) * leg4_foot(), L4_Y["Leg4_Shin"], *k), "dimgray")}
+            # printed solids in print orientation: the tread rim-down, each core half outer face down
+            "Leg4_Foot": (Rot(-90, 0, 0) * leg4_foot(), on_foot(leg4_foot(), qs, k), "dimgray"),
+            "Leg4_Foot_Core_A": (leg4_foot_core("A"), on_foot(leg4_foot_core("A"), qs, k), "gray"),
+            "Leg4_Foot_Core_B": (Rot(180, 0, 0) * leg4_foot_core("B"), on_foot(leg4_foot_core("B"), qs, k), "gray")}
+
+
+def on_foot(local, qs, k):
+    """A foot-local solid placed on the shin's foot point (rest pose)."""
+    return to_y(Rot(0, 0, 90.0 - qs) * Pos(0, -L4_L2, 4.0) * local, L4_Y["Leg4_Shin"], *k)
 
 
 M6_LENGTHS = (16, 20, 25, 30, 35, 40, 45, 50)
@@ -1254,16 +1295,15 @@ def leg_hardware(variant):
         prefix = "Leg4_HW_"
         qs = L4_Q0["shin"]
         r0, r1 = L4_CLAW_R
-        y0 = L4_Y["Leg4_Shin"] + 4.0 - L4_FOOT_R * 0.8                    # bulb's far face
-        screws = []
-        for a in (-90.0 - 62.0, -90.0 + 62.0):                              # 2x M3 x 40 across the bulb and claw
-            px, py = polar((r0 + r1) / 2, a)
-            local = Rot(0, 0, 90.0 - qs) * Pos(px, py - L4_L2, 0)
-            pt = to_y(local * Pos(0, 0, 0) * Cylinder(0.1, 0.1), 0.0, *k)
+        y_mid = L4_Y["Leg4_Shin"] + 4.0                                       # foot-local z 0 (the claw's mid-plane)
+        screws, inserts = [], []
+        for px, py in FOOT_SCREWS:                                          # v9.2: 2x M3 x 16 across the core's hub
+            pt = to_y(Rot(0, 0, 90.0 - qs) * Pos(px, py - L4_L2, 0) * Cylinder(0.1, 0.1), 0.0, *k)
             cx, cz = pt.center().X, pt.center().Z
-            screws.append(to_y(Rot(180, 0, 0) * shcs(3, 40, 5.5, 3.0), y0, cx, cz))
-            screws.append(to_y(hex_prism_z(5.5, 2.4) - Cylinder(1.5, 2.4, align=MIN), y0 + 2 * L4_FOOT_R * 0.8 - 2.4, cx, cz))
-        out[f"{prefix}foot_screws"] = (Compound(children=screws), "screw", "shin", {"bolt": "M3 x 40", "bearings": 0, "gaps": []})
+            screws.append(to_y(Rot(180, 0, 0) * shcs(3, 16, 5.5, 3.0), y_mid - FOOT_CORE_Z + 3.2, cx, cz))
+            inserts.append(to_y(insert(4.6, 2.6, 5.7), y_mid + FOOT_CORE_Z - 5.7, cx, cz))
+        out[f"{prefix}foot_screws"] = (Compound(children=screws), "screw", "shin", {"bolt": "M3 x 16", "bearings": 0, "gaps": []})
+        out[f"{prefix}foot_inserts"] = (Compound(children=inserts), "brass", "shin", {"bolt": "M3 x 5.7 heat-set insert", "bearings": 0, "gaps": []})
         cs = Cone(3.0, 1.5, 1.7, align=MIN) + Pos(0, 0, 1.7) * Cylinder(1.5, 16.0 - 1.7, align=MIN)   # M3 x 16 DIN 7991
         loc = lambda q: to_y(Rot(0, 0, 90.0 - qs) * q, L4_Y["Leg4_Shin"], *k)
         out[f"{prefix}shin_screws"] = (Compound(children=[loc(Pos(x, y, 8.0 + SHIN_PLATE_T) * Rot(180, 0, 0) * cs)
@@ -1966,7 +2006,8 @@ def assembly(name):
         out[n] = (c, "A" if n in A_FST else "B" if n in B_FST else "module", "brass" if n.startswith(("FST_Insert", "FST_Standoff")) else "screw", "hw")
     if v["leg"]:
         groups = {"Leg4_Thigh": "B", "Leg4_Crank": "A", "Leg4_Shin": "leg_shin", "Leg4_Foot": "leg_shin", "Leg4_Coupler": "leg_coupler",
-                  "Leg4_Shin_Plate_Back": "leg_shin", "Leg4_Shin_Plate_Front": "leg_shin"}
+                  "Leg4_Shin_Plate_Back": "leg_shin", "Leg4_Shin_Plate_Front": "leg_shin",
+                  "Leg4_Foot_Core_A": "leg_shin", "Leg4_Foot_Core_B": "leg_shin"}
         for n, (_, p, color) in leg4_parts(gantry=v["gantry"]).items():
             out[n] = (p, groups[n], color, "part")
         for n, (c, color, j, _) in leg_hardware("4bar").items():
@@ -2060,7 +2101,7 @@ if __name__ == "__main__":
         export_part("mounts", f"Desk_Angle_{end.title()}", flat(desk_angle(end), Rot(180, 0, 0)))   # foot on the bed, upright up
     export_part("mounts", "Rail_Carriage", flat(rail_carriage5(), Rot(0, 0, 0)))     # plate on the bed
 
-    tint = {"screw": "dimgray", "steel": "lightsteelblue", "motor": "goldenrod", "pcb": "green", "silver": "silver",
+    tint = {"amber": "orange", "screw": "dimgray", "steel": "lightsteelblue", "motor": "goldenrod", "pcb": "green", "silver": "silver",
             "yellow": "gold", "gray": "lightgray", "black": "dimgray", "red": "firebrick", "white": "gold", "brass": "goldenrod",
             "desk": "burlywood"}
     for vname in VARIANTS:
